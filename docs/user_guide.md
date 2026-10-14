@@ -80,29 +80,33 @@ In the `[OUTFALLS]` section, use type **`COUPLED`** instead of `FREE` / `NORMAL`
 
 Coupled runs require **continuous dynamic-wave** routing (`ROUTING DYNWAVE`), no routing `EVENTS`, and hydraulic-only routing when pollutants would otherwise be active (`coupled_open`).
 
-### Manhole / inlet table (`floodfile` / vconnect)
+### Manhole / inlet table (`floodconfig`)
 
-Vertical connections (surface ↔ junction) are listed in a text table loaded by `flood::verticalcon::read_vconinfo` (`iterateq.cpp`). Header:
+Vertical connections (surface ↔ junction) are listed in a text table named by the `.par` keyword `floodconfig`. The CPU path reads it with `flood::verticalcon::read_vconinfo` (`iterateq.cpp`) and the CUDA path with `lis::cuda::Topography::read_floodconfig` (`cuda_dem.cu`); both use the same format:
+
+- line 1: `node_num <N>`;
+- line 2: a header of exactly **10** words (skipped by the reader, so the names are free but the word count must be 10);
+- then *N* rows of 10 fields: an ID string followed by 9 numbers.
 
 ```text
 node_num      <N>
-ID      Index      Orifice_QCoef      Pond_Area      Max_Qout      Weir_QCoef      Length_W      Max_Qin
+ID      Index      Orifice_QCoef      Pond_Area      Max_Qout      Weir_QCoef      Length_W      Max_Qin      Orifice_QCoef_In      Orifice_Area_In
 ```
 
-Then *N* data rows. Columns:
+| # | Column | Code variable | Role |
+|---|---|---|---|
+| 1 | `ID` | (skipped) | Row label; not used by the code |
+| 2 | `Index` | `node_Vindex` | 0-based index of the SWMM node in the `.inp` node list |
+| 3 | `Orifice_QCoef` | `node_c0` | Orifice coefficient $C_0$ for sewer → surface flow |
+| 4 | `Pond_Area` | `node_area` | Orifice area $A_0$ (m²) for sewer → surface flow. Despite the name, this is **not** SWMM's `pondedArea` |
+| 5 | `Max_Qout` | `node_qoutmax` | Cap on sewer → surface discharge (m³/s) |
+| 6 | `Weir_QCoef` | `node_cw` | Weir coefficient $C_w$; read but currently unused (weir branch commented out) |
+| 7 | `Length_W` | `node_w` | Weir crest length (m); read but currently unused |
+| 8 | `Max_Qin` | `node_qinmax` | Cap on surface → sewer discharge (m³/s) |
+| 9 | `Orifice_QCoef_In` | `node_c1` | Orifice coefficient $C_1$ for surface → sewer flow |
+| 10 | `Orifice_Area_In` | `node_area1` | Orifice area $A_1$ (m²) for surface → sewer flow |
 
-| Column | Role |
-|---|---|
-| `ID` | SWMM node name / id used for linking |
-| `Index` | Row index |
-| `Orifice_QCoef` | Orifice discharge coefficient \(C_o\) |
-| `Pond_Area` | Ponded area at the manhole (m²) |
-| `Max_Qout` | Cap on outflow from sewer to surface |
-| `Weir_QCoef` | Weir discharge coefficient \(C_w\) |
-| `Length_W` | Weir crest length (m) |
-| `Max_Qin` | Cap on inflow from surface to sewer |
-
-The `.par` file points to this table via the flood / vconnect filename parameter used by `load_floodinfo` (see example cases). Exchange discharge is computed in `cal_exchange_flow` (`iterateq.cpp`) from surface depth versus node head, using weir-like and orifice-like branches and the caps above; the signed result is stored in `Vconnect::flow_1D_node` and passed to SWMM as `Node_Inflow`.
+Exchange discharge is computed in `cal_exchange_flow` (`iterateq.cpp`) from the SWMM node head, the surface water level and the crest elevation. Every active branch uses the orifice equation: sewer → surface with $C_0, A_0$ (capped by `Max_Qout`), and surface → sewer with $C_1, A_1$ in both the free and the submerged case (capped by `Max_Qin` and by the water in the cell). The weir equation is in the source but commented out. The three branches are written out in [`coupling_methodology.md`](coupling_methodology.md). The signed result is stored in `Vconnect::flow_1D_node` and passed to SWMM as `Node_Inflow`.
 
 ## 5. Outputs
 

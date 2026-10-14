@@ -85,17 +85,19 @@ H = z_{\mathrm{bed}} + \max\!\left(0,\, \frac{V_{\mathrm{old}} + \Delta t\,\sum(
 
 **Exchange volume credited at a COUPLED outfall** over a SWMM sub-step (`coupled_commit`):
 
-\[
-\Delta V_{\mathrm{ex}} = Q_{\mathrm{net}}\Delta t - \big(V_{\mathrm{end}}^{n+1} - V_{\mathrm{end}}^{n}\big)
-\]
+$$
+\Delta V_{ex} = Q_{net} \Delta t - \left( V_{end}^{n+1} - V_{end}^{n} \right)
+$$
 
 returned to LISFLOOD in m³ via `coupled_exchange()` (= `exchange * 0.028316846592`).
+
+Note: at a COUPLED outfall the `end_volume` weight is always 0 (the outfall is an exchange face, not a storage node), so $V_{end}^{n+1} - V_{end}^{n} = 0$ and the credited volume reduces to $\Delta V_{ex} = Q_{net} \Delta t$. The general form is kept to match `coupled_commit`.
 
 Requirements (`coupled_open`): continuous **DYNWAVE** routing, no routing `EVENTS`, hydraulic-only (no quality) when pollutants are present.
 
 ### B. Manhole inlets (surface → sewer)
 
-Vertical connections are described by a table (`vconnect.config` format in production models; see examples). Columns include orifice and weir coefficients, ponded area, max inflow/outflow and weir crest length. Runtime structures are `Vconnect` in `geometry.h` (`node_Vindex`, `flow_1D_node`, …).
+Vertical connections are described by a text table named in the `.par` file with the keyword `floodconfig` (format in `docs/user_guide.md`; example in `examples/02_coupled_synthetic/floodconfig.txt`). Each row gives the orifice coefficient and area for sewer → surface flow, the maximum outflow, the weir coefficient and crest length (currently unused), the maximum inflow, and the orifice coefficient and area for surface → sewer flow. Runtime structures are `Vconnect` in `geometry.h` (`node_Vindex`, `flow_1D_node`, …).
 
 Inlet discharges computed for the 2-D → 1-D direction are accumulated into `Node_Inflow[]` and applied through `coupled_sync_inlets()` when `ADDLINK == 1`. The interval-average rate is held constant on both ends of SWMM’s trapezoidal lateral-flow integration.
 
@@ -108,18 +110,34 @@ orificeflow_cal(c, A, H_up, H_down) = c * A * sqrt(2 * g * (H_up - H_down))
 weirflow_cal(cw, w, h)             = cw * w * h * sqrt(2 * g * h)
 ```
 
-with \(g =\) `SI_GRAVITY`. Heads are in metres (`UCF(LENGTH)` converts SWMM node head to SI). Crest elevation \(Z = \max(z_{\mathrm{node\,surface}},\, z_{\mathrm{DEM}})\).
+with $g$ = `SI_GRAVITY`. Heads are in metres (`UCF(LENGTH)` converts the SWMM node head to SI). $H_{1D}$ = SWMM node depth + invert elevation; $H_{2D}$ = DEM elevation + water depth of the linked cell; crest elevation $Z = \max(z_{node,surface}, z_{DEM})$, where $z_{node,surface}$ = invert + full depth of the SWMM node.
 
 Logic in `cal_exchange_flow` (tolerance `COUPLING_HEAD_TOL`):
 
-1. **Sewer → surface** when \(H_{1D}-Z > arepsilon\) and \(H_{1D}-H_{2D} > arepsilon\):  
-   \(Q = \minig(\mathrm{orifice}(C_0,A,H_{1D},H_{2D}),\, Q_{\mathrm{out,max}}ig)\);  
-   `flow_1D_node = -Q`, `flow_2D_node = +Q` (`node_c0`, `node_area`, `node_qoutmax`).
-2. **Surface → sewer** when the surface is above the crest and above (or equal within tolerance to) the sewer head:  
-   \(Q = \mathrm{orifice}(C_1, A_1, H_{2D}, H_{1D})\) using `node_c1` / `node_area1`.  
-   A weir branch calling `weirflow_cal(node_cw, node_w, H2D-Z)` exists in source but is **commented out**; the active path uses the orifice form above.
-3. Surface→sewer rates are then limited by available cell volume  
-   \(\min(Q,\, \Delta x\Delta y\, h / (n_{\mathrm{neg}}\Delta t),\, Q_{\mathrm{in,max}})\).
+1. **Sewer → surface (surcharge)** when $H_{1D} - Z > \epsilon$ and $H_{1D} - H_{2D} > \epsilon$:
+
+   $$Q = \min\left( C_0 A_0 \sqrt{2 g (H_{1D} - H_{2D})},\ Q_{out,max} \right)$$
+
+   `flow_1D_node = -Q`, `flow_2D_node = +Q` (uses `node_c0`, `node_area`, `node_qoutmax`).
+2. **Surface → sewer, free inflow** when $H_{1D} \le Z + \epsilon$ and $H_{2D} - Z > \epsilon$ (sewer head at or below the crest, surface water above it):
+
+   $$Q = C_1 A_1 \sqrt{2 g (H_{2D} - H_{1D})}$$
+
+   `flow_1D_node = +Q`, `flow_2D_node = -Q` (uses `node_c1`, `node_area1`). The original weir form $Q = C_w w (H_{2D}-Z) \sqrt{2 g (H_{2D}-Z)}$ (`weirflow_cal(node_cw, node_w, H2D - Z)`) is still in the source but **commented out**, so this branch is currently an orifice, not a weir. `node_cw` / `node_w` are read but unused.
+3. **Surface → sewer, submerged inflow** when $H_{1D} \ge Z - \epsilon$ and $H_{2D} - H_{1D} > \epsilon$ (sewer head at or above the crest, surface head higher still):
+
+   $$Q = C_1 A_1 \sqrt{2 g (H_{2D} - H_{1D})}$$
+
+   Same coefficients and sign convention as branch 2.
+4. **No exchange** otherwise, and for any connection with `dem_Vindex == -9999` (outside the DEM, or an OUTFALL / STORAGE / DIVIDER node): $Q = 0$.
+
+Here $\epsilon$ = `COUPLING_HEAD_TOL`. The branches are tested in the order 1 → 2 → 3, so branch 3 applies only when branches 1 and 2 do not.
+
+After the branch selection, every surface → sewer rate (branches 2 and 3) is limited by the water available in the linked cell, shared among the $n_{neg}$ inlets draining that cell, and by the inflow cap (`node_qinmax`):
+
+$$Q_{in} = \min\left( Q,\ \frac{\Delta x \Delta y h}{n_{neg} \Delta t},\ Q_{in,max} \right)$$
+
+Sewer → surface rates are capped only by $Q_{out,max}$ in branch 1.
 
 The `.par` keyword **`floodconfig`** points to the vertical-connection table (`pars.cpp`).
 

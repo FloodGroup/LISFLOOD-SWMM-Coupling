@@ -78,7 +78,7 @@ Essential `.par` keywords for coupling:
 | `swmmout` | SWMM binary output |
 | `coupleint` | `step` (exchange every 2-D step) or positive seconds |
 
-In the SWMM `.inp`, mark outfalls that exchange with the 2-D surface as type **`COUPLED`**. Manhole inlet parameters are supplied via a `vconnect` / vertical-connection table (see `docs/user_guide.md` and `examples/`).
+In the SWMM `.inp`, mark outfalls that exchange with the 2-D surface as type **`COUPLED`**. Manhole inlet parameters are supplied via a vertical-connection table named by the `.par` keyword `floodconfig` (see `docs/user_guide.md` and `examples/`).
 
 ## Documentation
 
@@ -92,9 +92,7 @@ See [`examples/README.md`](examples/README.md). Each case is self-contained and 
 
 ## Binary release package
 
-Pre-built Windows binaries (plus redistributable runtimes) are prepared as a **GitHub Release** zip outside this git tree:
-
-a folder outside the git tree (maintainers prepare `open_source_release/` next to the repo on the build machine)
+Pre-built Windows binaries (with the redistributable Intel and Microsoft runtime DLLs) are published as a zip on the repository's **GitHub Releases** page, not in this git tree.
 
 Do not commit `.exe` / proprietary DLLs to git. See `THIRD_PARTY_NOTICES.txt` inside the zip.
 
