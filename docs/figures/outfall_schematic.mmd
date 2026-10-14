@@ -1,12 +1,12 @@
 flowchart TB
   subgraph Cell["2-D receiving cell"]
-    Z["bed elevation z_bed"]
-    H2["surface head H"]
-    A["cell area A"]
+    A["A_cell"]
+    Z["z_bed"]
+    H2["H = z_bed + V/A"]
   end
   subgraph Pipe["Terminal conduit"]
-    N["interior node storage"]
-    F["COUPLED outfall face"]
+    N["interior node (full pipe storage)"]
+    F["COUPLED face (no storage; end_volume weight = 0)"]
   end
-  H2 <-->|"ΔV_ex"| F
+  H2 <-->|"ΔV_ex ≡ Q_net Δt [coupled_commit]"| F
   N --- F

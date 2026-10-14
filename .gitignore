@@ -48,3 +48,6 @@ results/
 
 # Large local configs
 vconnect.config
+
+# Binary release package (uploaded to GitHub Releases, not tracked)
+release/
