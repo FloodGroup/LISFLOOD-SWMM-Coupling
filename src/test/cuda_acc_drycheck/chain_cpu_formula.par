@@ -1,0 +1,14 @@
+DEMfile chain_inflow_outflow.dem
+startfile chain_inflow_outflow.start
+
+resroot chain_inflow_outflow
+dirroot results_chain_cpu_formula
+
+sim_time 1.0
+initial_tstep 1.0
+massint 1.0
+saveint 1.0
+
+elevoff
+acceleration
+cuda

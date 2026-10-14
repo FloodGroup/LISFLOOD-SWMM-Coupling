@@ -1,0 +1,68 @@
+[TITLE]
+Synthetic coupled demo for open-source layout
+
+[OPTIONS]
+FLOW_UNITS           CMS
+INFILTRATION         HORTON
+FLOW_ROUTING         DYNWAVE
+START_DATE           01/01/2020
+START_TIME           00:00:00
+REPORT_START_DATE    01/01/2020
+REPORT_START_TIME    00:00:00
+END_DATE             01/01/2020
+END_TIME             00:05:00
+SWEEP_START          01/01
+SWEEP_END            12/31
+DRY_DAYS             0
+REPORT_STEP          00:01:00
+WET_STEP             00:00:30
+DRY_STEP             00:01:00
+ROUTING_STEP         0:00:05
+ALLOW_PONDING        NO
+INERTIAL_DAMPING     PARTIAL
+VARIABLE_STEP        0.75
+LENGTHENING_STEP     0
+MIN_SURFAREA         1.14
+NORMAL_FLOW_LIMITED  BOTH
+SKIP_STEADY_STATE    NO
+FORCE_MAIN_EQUATION  H-W
+LINK_OFFSETS         DEPTH
+MIN_SLOPE            0
+MAX_TRIALS           8
+HEAD_TOLERANCE       0.0015
+SYS_FLOW_TOL         5
+LAT_FLOW_TOL         5
+
+[JUNCTIONS]
+;;Name           Elevation  MaxDepth   InitDepth  SurDepth  Aponded
+J1               9.0        1.0        0          0         0
+
+[OUTFALLS]
+;;Name           Elevation  Type       Stage Data       Gated   Route To
+OF1              8.5        COUPLED    NO
+
+[CONDUITS]
+;;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow
+C1               J1               OF1              20         0.013      0          0          0          0
+
+[XSECTIONS]
+;;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels
+C1               CIRCULAR     0.5              0          0          0          1
+
+[COORDINATES]
+;;Node           X-Coord            Y-Coord
+J1               45.000             45.000
+OF1              55.000             45.000
+
+[REPORT]
+INPUT      YES
+CONTROLS   NO
+SUBCATCHMENTS ALL
+NODES ALL
+LINKS ALL
+
+[TAGS]
+
+[MAP]
+DIMENSIONS 0 0 100 100
+Units      Meters

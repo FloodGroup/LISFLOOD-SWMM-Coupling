@@ -1,0 +1,50 @@
+# Build
+build/
+cmake-build-*/
+out/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.suo
+*.user
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local / proprietary redistributables (never commit)
+DLL's/
+dll_intel/
+**/msvcp*.dll
+**/vcruntime*.dll
+**/libiomp5md.dll
+**/libmmd.dll
+**/svml_dispmd.dll
+
+# Simulation outputs
+results/
+*.out
+*.rpt
+*.hotstart
+
+# Large local configs
+vconnect.config

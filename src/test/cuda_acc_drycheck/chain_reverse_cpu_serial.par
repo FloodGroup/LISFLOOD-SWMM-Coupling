@@ -1,0 +1,13 @@
+DEMfile chain_reverse.dem
+startfile chain_reverse.start
+
+resroot chain_reverse
+dirroot results_chain_reverse_cpu_serial
+
+sim_time 1.0
+initial_tstep 1.0
+massint 1.0
+saveint 1.0
+
+elevoff
+acceleration

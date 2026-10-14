@@ -1,0 +1,16 @@
+DEMfile         dem.asc
+startfile       start.asc
+resroot         syn
+dirroot         results
+sim_time        60.0
+initial_tstep   1.0
+massint         10.0
+saveint         60.0
+elevoff
+acceleration
+swmminp         network.inp
+swmmrpt         network.rpt
+swmmout         network.out
+floodconfig     floodconfig.txt
+flooderror      flood_error.txt
+coupleint       step

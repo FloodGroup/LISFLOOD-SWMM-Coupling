@@ -1,0 +1,23 @@
+flowchart LR
+  subgraph Surface["2-D surface (LISFLOOD-FP)"]
+    DEM[DEM / water depth H]
+    SOLVER["ACC / FV1 / other SWE"]
+  end
+  subgraph Exchange["Coupling layer"]
+    CLOCK["SwmmCoupleClock"]
+    GATHER["gather_coupling_depths"]
+    CB["coupled_boundary.c"]
+    VIN["Manhole inlet Q"]
+  end
+  subgraph Sewer["1-D sewer (SWMM)"]
+    DW["Dynamic wave"]
+    OUT["COUPLED outfalls"]
+  end
+  SOLVER --> CLOCK
+  DEM --> GATHER
+  GATHER --> CB
+  CLOCK --> CB
+  CB --> OUT
+  OUT --> DW
+  DW --> CB
+  CB --> SOLVER

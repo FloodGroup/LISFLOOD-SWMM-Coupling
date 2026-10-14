@@ -1,0 +1,12 @@
+flowchart TB
+  subgraph Cell["2-D receiving cell"]
+    Z["bed elevation z_bed"]
+    H2["surface head H"]
+    A["cell area A"]
+  end
+  subgraph Pipe["Terminal conduit"]
+    N["interior node storage"]
+    F["COUPLED outfall face"]
+  end
+  H2 <-->|"ΔV_ex"| F
+  N --- F

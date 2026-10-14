@@ -1,0 +1,14 @@
+DEMfile drycheck_conservation.dem
+startfile drycheck_conservation.start
+
+resroot drycheck_conservation
+dirroot results
+
+sim_time 1.0
+initial_tstep 1.0
+massint 1.0
+saveint 1.0
+
+elevoff
+acceleration
+cuda
