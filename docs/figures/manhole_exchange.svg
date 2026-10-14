@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
+  <defs>
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EEE8DD"/><stop offset="1" stop-color="#E2D8C6"/>
+    </linearGradient>
+    <linearGradient id="sw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A3C0DA"/><stop offset="1" stop-color="#5B8BB4"/>
+    </linearGradient>
+    <linearGradient id="pw" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9CC3B3"/><stop offset="1" stop-color="#4C8775"/>
+    </linearGradient>
+    <marker id="o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#B4643A"/></marker>
+    <clipPath id="pc"><rect x="1" y="1" width="358" height="538" rx="9"/></clipPath>
+
+    <!-- shared ground + manhole + pipe, in panel-local coordinates -->
+    <g id="ground">
+      <rect x="0" y="210" width="360" height="160" fill="url(#soil)"/>
+      <rect x="0" y="207" width="360" height="6" fill="#5A5A5A"/>
+      <rect x="20" y="306" width="320" height="40" rx="20" fill="#F4F4F2" stroke="#4D4D4D" stroke-width="2"/>
+      <rect x="157" y="210" width="46" height="100" fill="#F4F4F2"/>
+      <path d="M157,213 V308 M203,213 V308" stroke="#4D4D4D" stroke-width="2.5"/>
+    </g>
+  </defs>
+
+  <rect width="1200" height="600" fill="#ffffff"/>
+
+  <!-- ================= (a) surcharge ================= -->
+  <g transform="translate(30,30)">
+    <rect x="0.5" y="0.5" width="359" height="539" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+    <g clip-path="url(#pc)">
+      <use href="#ground"/>
+      <rect x="22" y="308" width="316" height="36" rx="18" fill="url(#pw)"/>
+      <rect x="159" y="210" width="42" height="112" fill="url(#pw)"/>
+      <path d="M20,210 L20,196 Q100,190 180,192 T340,196 L340,210 Z" fill="url(#sw)"/>
+      <rect x="150" y="204" width="60" height="6" rx="2" fill="#333333"/>
+      <path d="M180,196 Q170,178 158,168 M180,196 Q190,178 202,168" stroke="#7FA3C4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <line x1="120" y1="142" x2="300" y2="142" stroke="#3F7F6E" stroke-width="2" stroke-dasharray="6 4"/>
+      <line x1="20" y1="210" x2="340" y2="210" stroke="#555555" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <path d="M180,300 V150" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#o)"/>
+    </g>
+    <text x="20" y="38" font-size="19" font-weight="700" fill="#222222">(a) Surcharge</text>
+    <text x="20" y="62" font-size="15" fill="#666666">sewer &#8594; surface &#183; orifice</text>
+    <g font-size="16" font-weight="700">
+      <rect x="72" y="130" width="44" height="25" rx="5" fill="#ffffff" stroke="#B9D3C8"/><text x="79" y="148" fill="#2A5E51">H<tspan baseline-shift="sub" font-size="11">1D</tspan></text>
+      <text x="304" y="188" fill="#2C5577">H<tspan baseline-shift="sub" font-size="11">2D</tspan></text>
+      <text x="26" y="230" fill="#555555">Z</text>
+    </g>
+    <rect x="14" y="384" width="332" height="140" rx="8" fill="#F6F6F4"/>
+    <g font-size="14.5" fill="#555555">
+      <text x="28" y="410">when H<tspan baseline-shift="sub" font-size="10.5">1D</tspan> &#8722; Z &gt; &#949; and H<tspan baseline-shift="sub" font-size="10.5">1D</tspan> &#8722; H<tspan baseline-shift="sub" font-size="10.5">2D</tspan> &gt; &#949;</text>
+      <text x="28" y="446" font-size="18" fill="#222222" font-weight="700">Q = C<tspan baseline-shift="sub" font-size="12">0</tspan> A<tspan baseline-shift="sub" font-size="12">0</tspan> &#8730;(2g (H<tspan baseline-shift="sub" font-size="12">1D</tspan> &#8722; H<tspan baseline-shift="sub" font-size="12">2D</tspan>))</text>
+      <text x="28" y="478">capped by Q<tspan baseline-shift="sub" font-size="10.5">out,max</tspan> and by the</text>
+      <text x="28" y="500">available sewer volume / dt</text>
+    </g>
+  </g>
+
+  <!-- ================= (b) free inflow ================= -->
+  <g transform="translate(420,30)">
+    <rect x="0.5" y="0.5" width="359" height="539" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+    <g clip-path="url(#pc)">
+      <use href="#ground"/>
+      <rect x="22" y="328" width="316" height="16" rx="8" fill="url(#pw)"/>
+      <rect x="159" y="278" width="42" height="44" fill="url(#pw)"/>
+      <path d="M20,210 L20,178 Q100,172 180,176 T340,178 L340,210 Z" fill="url(#sw)"/>
+      <rect x="150" y="204" width="60" height="6" rx="2" fill="#333333"/>
+      <line x1="120" y1="278" x2="300" y2="278" stroke="#3F7F6E" stroke-width="2" stroke-dasharray="6 4"/>
+      <line x1="20" y1="210" x2="340" y2="210" stroke="#555555" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <path d="M180,138 V264" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#o)"/>
+    </g>
+    <text x="20" y="38" font-size="19" font-weight="700" fill="#222222">(b) Free inflow</text>
+    <text x="20" y="62" font-size="15" fill="#666666">surface &#8594; sewer &#183; weir</text>
+    <g font-size="16" font-weight="700">
+      <rect x="72" y="266" width="44" height="25" rx="5" fill="#ffffff" stroke="#B9D3C8"/><text x="79" y="284" fill="#2A5E51">H<tspan baseline-shift="sub" font-size="11">1D</tspan></text>
+      <text x="304" y="170" fill="#2C5577">H<tspan baseline-shift="sub" font-size="11">2D</tspan></text>
+      <text x="26" y="230" fill="#555555">Z</text>
+    </g>
+    <rect x="14" y="384" width="332" height="140" rx="8" fill="#F6F6F4"/>
+    <g font-size="14.5" fill="#555555">
+      <text x="28" y="410">when H<tspan baseline-shift="sub" font-size="10.5">1D</tspan> &#8804; Z + &#949; and H<tspan baseline-shift="sub" font-size="10.5">2D</tspan> &#8722; Z &gt; &#949;</text>
+      <text x="28" y="446" font-size="18" fill="#222222" font-weight="700">Q = C<tspan baseline-shift="sub" font-size="12">w</tspan> w (H<tspan baseline-shift="sub" font-size="12">2D</tspan> &#8722; Z) &#8730;(2g (H<tspan baseline-shift="sub" font-size="12">2D</tspan> &#8722; Z))</text>
+      <text x="28" y="478">weir law, head above the crest Z;</text>
+      <text x="28" y="500">C<tspan baseline-shift="sub" font-size="10.5">w</tspan>, w from floodconfig columns 6, 7</text>
+    </g>
+  </g>
+
+  <!-- ================= (c) submerged inflow ================= -->
+  <g transform="translate(810,30)">
+    <rect x="0.5" y="0.5" width="359" height="539" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+    <g clip-path="url(#pc)">
+      <use href="#ground"/>
+      <rect x="22" y="310" width="316" height="34" rx="17" fill="url(#pw)"/>
+      <rect x="159" y="210" width="42" height="112" fill="url(#pw)"/>
+      <path d="M20,210 L20,168 Q100,162 180,166 T340,168 L340,210 Z" fill="url(#sw)"/>
+      <rect x="150" y="204" width="60" height="6" rx="2" fill="#333333"/>
+      <line x1="120" y1="192" x2="300" y2="192" stroke="#3F7F6E" stroke-width="2" stroke-dasharray="6 4"/>
+      <line x1="20" y1="210" x2="340" y2="210" stroke="#555555" stroke-width="1.5" stroke-dasharray="3 3"/>
+      <path d="M180,128 V294" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#o)"/>
+    </g>
+    <text x="20" y="38" font-size="19" font-weight="700" fill="#222222">(c) Submerged inflow</text>
+    <text x="20" y="62" font-size="15" fill="#666666">surface &#8594; sewer &#183; orifice</text>
+    <g font-size="16" font-weight="700">
+      <rect x="72" y="180" width="44" height="25" rx="5" fill="#ffffff" stroke="#B9D3C8"/><text x="79" y="198" fill="#2A5E51">H<tspan baseline-shift="sub" font-size="11">1D</tspan></text>
+      <text x="304" y="160" fill="#2C5577">H<tspan baseline-shift="sub" font-size="11">2D</tspan></text>
+      <text x="26" y="230" fill="#555555">Z</text>
+    </g>
+    <rect x="14" y="384" width="332" height="140" rx="8" fill="#F6F6F4"/>
+    <g font-size="14.5" fill="#555555">
+      <text x="28" y="410">when H<tspan baseline-shift="sub" font-size="10.5">1D</tspan> &#8805; Z &#8722; &#949; and H<tspan baseline-shift="sub" font-size="10.5">2D</tspan> &#8722; H<tspan baseline-shift="sub" font-size="10.5">1D</tspan> &gt; &#949;</text>
+      <text x="28" y="446" font-size="18" fill="#222222" font-weight="700">Q = C<tspan baseline-shift="sub" font-size="12">1</tspan> A<tspan baseline-shift="sub" font-size="12">1</tspan> &#8730;(2g (H<tspan baseline-shift="sub" font-size="12">2D</tspan> &#8722; H<tspan baseline-shift="sub" font-size="12">1D</tspan>))</text>
+      <text x="28" y="478">(b), (c) capped by Q<tspan baseline-shift="sub" font-size="10.5">in,max</tspan> and by the</text>
+      <text x="28" y="500">cell water h &#916;x &#916;y / (n &#916;t), n inlets</text>
+    </g>
+  </g>
+</svg>

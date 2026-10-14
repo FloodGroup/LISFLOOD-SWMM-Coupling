@@ -51,3 +51,7 @@ vconnect.config
 
 # Binary release package (uploaded to GitHub Releases, not tracked)
 release/
+
+# NetCDF extras not used by the build
+src/windep/netCDF4-64/deps/
+src/windep/netCDF4-64/bin/

@@ -1,148 +1,256 @@
 # User guide
 
-Practical steps to obtain, build, and run the LISFLOOD-FP × SWMM coupling. Equations and exchange logic live in [`coupling_methodology.md`](coupling_methodology.md).
+How to build the coupled model, prepare a case, run it, and read the results. For the physics and the exchange algorithm, see [coupling_methodology.md](coupling_methodology.md).
 
-## Contents
+**Contents**
 
-- [1. Obtain the code](#1-obtain-the-code)
-- [2. Build from source](#2-build-from-source)
-- [3. Run a simulation](#3-run-a-simulation)
-- [4. SWMM input for coupling](#4-swmm-input-for-coupling)
-- [5. Outputs](#5-outputs)
-- [6. Hotstart](#6-hotstart)
-- [7. Licence reminders when redistributing binaries](#7-licence-reminders-when-redistributing-binaries)
-
----
-
-## 1. Obtain the code
-
-Clone or download this repository. All compilable sources are under `src/`. Documentation is under `docs/`. Small runnable cases are under `examples/`.
-
-> 📦 Optional Windows binaries (not in git) are packaged separately for GitHub Releases; see the repository [README](../README.md).
+1. [Requirements](#1-requirements)
+2. [Build](#2-build)
+3. [Prepare a coupled case](#3-prepare-a-coupled-case)
+4. [The `floodconfig` table](#4-the-floodconfig-table)
+5. [Parameter file reference](#5-parameter-file-reference)
+6. [Run](#6-run)
+7. [Outputs](#7-outputs)
+8. [Hotstart](#8-hotstart)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Redistributing binaries](#10-redistributing-binaries)
 
 ---
 
-## 2. Build from source
+## 1. Requirements
 
-### Prerequisites
-
-| Dependency | Notes |
+| Item | Notes |
 |---|---|
+| NVIDIA GPU + CUDA Toolkit ≥ 11 | Required for coupled runs; CUB is taken from the toolkit. Standalone LISFLOOD-FP runs also work on CPU. |
 | CMake ≥ 3.13 | |
-| MSVC 2019/2022 or Linux GCC/Clang | C++14 |
-| CUDA Toolkit | Optional; needed for GPU ACC / FV1 coupling |
-| NetCDF + HDF5 | Windows: headers/libs under `src/windep/` (bundled). Linux: install `libnetcdf-dev` |
-| OpenMP | Usually with the compiler |
+| C++14 compiler | MSVC 2019 / 2022 on Windows; GCC or Clang on Linux |
+| OpenMP | Usually ships with the compiler |
+| NetCDF + HDF5 + zlib | For NetCDF output and dynamic rainfall; can be disabled (see below) |
+| `libnuma` | Linux only (`libnuma-dev` on Debian / Ubuntu) |
 
-### Windows (script)
+## 2. Build
 
-Edit paths, then:
-
-```powershell
-.\tools\build.ps1 `
-  -VcVars "C:\BuildTools\VC\Auxiliary\Build\vcvars64.bat" `
-  -CMake "C:\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" `
-  -CudaArchitecture 86 `
-  -RedistDirectory "C:\BuildTools\VC\Redist\MSVC\<version>\x64"
-```
-
-The script configures NMake Makefiles in a build directory, compiles target `lisflood`, and copies `lisflood.exe` plus NetCDF/HDF5/zlib DLLs to the output directory. MSVC CRT / OpenMP redistributables are copied from `-RedistDirectory` when provided.
-
-### Windows (Visual Studio CMake)
-
-Open the **repository root** (or `src/`) as a CMake folder, select a Release x64 preset, build target `lisflood`.
+The build is defined in `src/CMakeLists.txt`; the root `CMakeLists.txt` forwards to it. The only target you need is `lisflood`.
 
 ### Linux
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=75
+sudo apt install cmake libnuma-dev libnetcdf-dev     # Debian / Ubuntu
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=86
 cmake --build build --target lisflood -j
 ```
 
----
+The executable is `build/src/lisflood`.
 
-## 3. Run a simulation
+### Windows, scripted
 
-```text
-lisflood path/to/case.par
+`tools/build.ps1` loads the MSVC environment, configures with NMake and builds `lisflood`:
+
+```powershell
+.\tools\build.ps1 `
+  -VcVars   "C:\BuildTools\VC\Auxiliary\Build\vcvars64.bat" `
+  -CMake    "C:\BuildTools\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" `
+  -CudaArchitecture 86 `
+  -RedistDirectory "C:\BuildTools\VC\Redist\MSVC\<version>\x64"
 ```
 
-Working directory is typically the case folder so relative paths in `.par` resolve.
-
-### Essential `.par` keywords
-
-| Keyword | Example | Meaning |
+| Parameter | Default | Meaning |
 |---|---|---|
-| `DEMfile` | `dem.asc` | ASCII DEM |
-| `resroot` | `out` | Output name prefix |
-| `dirroot` | `results` | Output directory |
-| `sim_time` | `3600` | Simulation length (s) |
-| `acceleration` / `cuda` / `fv1` | flags | Solver selection |
-| `swmminp` | `network.inp` | SWMM input |
-| `swmmrpt` | `network.rpt` | SWMM report |
-| `swmmout` | `network.out` | SWMM binary out |
-| `coupleint` | `step` or `1.0` | Exchange every 2-D step, or every *N* seconds |
+| `-VcVars` | required | path to `vcvars64.bat` |
+| `-CMake` | required | path to `cmake.exe` |
+| `-CudaArchitecture` | `75` | GPU compute capability without the dot |
+| `-MsvcToolset` | `14.39` | MSVC toolset passed to `vcvars64.bat` |
+| `-RedistDirectory` | empty | if set, the MSVC runtime and OpenMP DLLs are copied next to the executable |
+| `-OutputDirectory` | `build\release` | where `lisflood.exe` and the DLLs are collected |
 
-> Without `swmminp`, the model runs as standalone LISFLOOD-FP (no sewer coupling).
+You can also open the repository folder in Visual Studio as a CMake project and build the `lisflood` target in a Release x64 configuration.
 
-Upstream LISFLOOD-FP parameters (friction, boundary files, rainfall, …) follow the official manuals:
+### NetCDF on Windows
 
-- LISFLOOD-FP 8.1 on Zenodo: <https://zenodo.org/records/6912932>
-- EPA SWMM: <https://www.epa.gov/water-research/storm-water-management-model-swmm>
+CMake links Windows builds against `src/windep/netCDF4-64/lib/netcdf.lib`. The git tree ships the headers only, so either:
 
----
+- copy `netcdf.lib` from a NetCDF 4 Windows distribution into `src/windep/netCDF4-64/lib/` and the matching DLLs next to the executable; or
+- build without NetCDF: copy `src/config.default.cmake`, change `set(_NETCDF 1)` to `set(_NETCDF 0)`, and configure with `-D_CONFIG=<your copy>`.
 
-## 4. SWMM input for coupling
+### Build options
+
+`src/config.default.cmake` sets numeric precision and feature switches. To change them, copy the file and pass it with `-D_CONFIG=<file>`. The file also adds `compute_75` code generation, so a build runs on any GPU of compute capability 7.5 or newer, while `CMAKE_CUDA_ARCHITECTURES` adds native code for your GPU.
+
+## 3. Prepare a coupled case
+
+A coupled case is a normal LISFLOOD-FP case plus a SWMM network and a manhole table:
+
+```text
+my_case/
+├── case.par          LISFLOOD-FP parameters + coupling keywords
+├── dem.asc           DEM (ASCII grid)
+├── start.asc         initial depth (optional)
+├── network.inp       SWMM network
+└── floodconfig.txt   manhole <-> cell table
+```
+
+Checklist:
+
+- [ ] The DEM and the SWMM `[COORDINATES]` use the **same projected coordinate system**, in metres.
+- [ ] `FLOW_ROUTING DYNWAVE` in the SWMM `[OPTIONS]`.
+- [ ] No `[EVENTS]` section; routing must be continuous.
+- [ ] No pollutants, or `IGNORE_QUALITY YES`.
+- [ ] Outfalls that should exchange with the surface have type `COUPLED` and lie on a valid DEM cell.
+- [ ] Every junction that can exchange with the surface has a row in `floodconfig`.
+- [ ] Junction rim elevations (invert + max depth) are close to the DEM; differences above 0.1 m are reported in the `flooderror` log.
+- [ ] The `.par` file contains `cuda` and either `acceleration` or `fv1`.
 
 ### `COUPLED` outfalls
 
-In the `[OUTFALLS]` section, use type **`COUPLED`** instead of `FREE` / `NORMAL` / `FIXED` / … for nodes that exchange volume with the 2-D surface. The coupler maps each such outfall to a DEM cell and updates an external stage from the cell water surface (`coupled_set_cell` in `coupled_boundary.c`).
-
-> ⚠️ Coupled runs require **continuous dynamic-wave** routing (`ROUTING DYNWAVE`), no routing `EVENTS`, and hydraulic-only routing when pollutants would otherwise be active (`coupled_open`).
-
-### Manhole / inlet table (`floodconfig`)
-
-Vertical connections (surface ↔ junction) are listed in a text table named by the `.par` keyword `floodconfig`. The CPU path reads it with `flood::verticalcon::read_vconinfo` (`iterateq.cpp`) and the CUDA path with `lis::cuda::Topography::read_floodconfig` (`cuda_dem.cu`); both use the same format:
-
-- line 1: `node_num <N>`;
-- line 2: a header of exactly **10** words (skipped by the reader, so the names are free but the word count must be 10);
-- then *N* rows of 10 fields: an ID string followed by 9 numbers.
+In the SWMM `[OUTFALLS]` section, use type `COUPLED` in place of `FREE`, `NORMAL`, `FIXED`, `TIDAL` or `TIMESERIES`. It takes no stage data:
 
 ```text
-node_num      <N>
-ID      Index      Orifice_QCoef      Pond_Area      Max_Qout      Weir_QCoef      Length_W      Max_Qin      Orifice_QCoef_In      Orifice_Area_In
+[OUTFALLS]
+;;Name   Elevation  Type      Gated
+OF1      8.5        COUPLED   NO
 ```
 
-| # | Column | Code variable | Role |
-|---|---|---|---|
-| 1 | `ID` | (skipped) | Row label; not used by the code |
-| 2 | `Index` | `node_Vindex` | 0-based index of the SWMM node in the `.inp` node list |
-| 3 | `Orifice_QCoef` | `node_c0` | Orifice coefficient $C_0$ for sewer → surface flow |
-| 4 | `Pond_Area` | `node_area` | Orifice area $A_0$ (m²) for sewer → surface flow. Despite the name, this is **not** SWMM's `pondedArea` |
-| 5 | `Max_Qout` | `node_qoutmax` | Cap on sewer → surface discharge (m³/s) |
-| 6 | `Weir_QCoef` | `node_cw` | Weir coefficient $C_w$; read but currently unused (weir branch commented out) |
-| 7 | `Length_W` | `node_w` | Weir crest length (m); read but currently unused |
-| 8 | `Max_Qin` | `node_qinmax` | Cap on surface → sewer discharge (m³/s) |
-| 9 | `Orifice_QCoef_In` | `node_c1` | Orifice coefficient $C_1$ for surface → sewer flow |
-| 10 | `Orifice_Area_In` | `node_area1` | Orifice area $A_1$ (m²) for surface → sewer flow |
+The outfall's stage is then set every exchange from the water level of the 2-D cell that contains it ([methodology §6](coupling_methodology.md#6-coupled-outfalls)). Ordinary outfalls inside the DEM keep their SWMM boundary condition, and their discharge is added to the cell they fall in.
 
-Exchange discharge is computed in `cal_exchange_flow` (`iterateq.cpp`) from the SWMM node head, the surface water level and the crest elevation. Every active branch uses the orifice equation: sewer → surface with $C_0, A_0$ (capped by `Max_Qout`), and surface → sewer with $C_1, A_1$ in both the free and the submerged case (capped by `Max_Qin` and by the water in the cell). The weir equation is in the source but commented out. The three branches are written out in [`coupling_methodology.md`](coupling_methodology.md). The signed result is stored in `Vconnect::flow_1D_node` and passed to SWMM as `Node_Inflow`.
+## 4. The `floodconfig` table
 
----
+The file named by the `floodconfig` keyword lists the SWMM nodes that exchange with the surface through a manhole or inlet. It is read by `Topography::read_floodconfig` (`cuda_dem.cu`):
 
-## 5. Outputs
+- line 1: `node_num <N>`;
+- line 2: a header of exactly **10** words, which is skipped (the words are free, but there must be 10);
+- then *N* rows of 10 whitespace-separated fields: a label followed by 9 numbers.
 
-Standard LISFLOOD-FP rasters / mass files appear under `dirroot`. SWMM writes `swmmrpt` / `swmmout`. Coupling builds may also emit mass-audit / exchange diagnostics depending on solver flags (see `cuda/cuda_stats.*`).
+```text
+node_num      1
+ID   Index   Orifice_QCoef   Pond_Area   Max_Qout   Weir_QCoef   Length_W   Max_Qin   Orifice_QCoef_In   Orifice_Area_In
+J1   0       0.6             1.0         1.0        0.5          1.0        1.0       0.6                1.0
+```
 
----
+| # | Column | Variable | Meaning | Used in |
+|:-:|---|---|---|---|
+| 1 | `ID` | — | row label, ignored by the code | — |
+| 2 | `Index` | `node_Vindex` | 0-based index of the node in SWMM's node list | mapping |
+| 3 | `Orifice_QCoef` | `node_c0` | orifice coefficient \(C_0\), sewer → surface | surcharge |
+| 4 | `Pond_Area` | `node_area` | orifice area \(A_0\) (m²), sewer → surface. Not SWMM's ponded area. | surcharge |
+| 5 | `Max_Qout` | `node_qoutmax` | maximum discharge sewer → surface (m³/s) | surcharge |
+| 6 | `Weir_QCoef` | `node_cw` | weir coefficient \(C_w\) | free inflow |
+| 7 | `Length_W` | `node_w` | weir crest length \(w\) (m) | free inflow |
+| 8 | `Max_Qin` | `node_qinmax` | maximum discharge surface → sewer (m³/s) | free and submerged inflow |
+| 9 | `Orifice_QCoef_In` | `node_c1` | orifice coefficient \(C_1\), surface → sewer | submerged inflow |
+| 10 | `Orifice_Area_In` | `node_area1` | orifice area \(A_1\) (m²), surface → sewer | submerged inflow |
 
-## 6. Hotstart
+**Node index.** SWMM numbers nodes in the order their lines appear in the input file, across the `[JUNCTIONS]`, `[OUTFALLS]`, `[DIVIDERS]` and `[STORAGE]` sections (`input.c`). The first node line is index 0. In a file written by the SWMM GUI, `[JUNCTIONS]` comes first, so the junctions are numbered 0, 1, 2, … in the order listed.
 
-Surface and SWMM hotstart paths were extended for coupled states (`chkpnt.cpp`, `hotstart.c`). Prefer rebuilding hotstarts with the same coupling version; mixing with pre-coupling hotstarts can disagree on pipe storage definitions.
+Rows that point to an outfall, storage unit or divider, lie outside the DEM, or fall on a NoData cell are kept but do not exchange. Each one is reported in the `flooderror` log.
 
----
+## 5. Parameter file reference
 
-## 7. Licence reminders when redistributing binaries
+### Coupling keywords
 
-- Source and GPL-covered binaries: GPL-2.0.
-- MSVC CRT / OpenMP and Intel OpenMP / math DLLs (if present in a release zip) are under their vendors’ redistributable EULAs — **not** GPL. Ship them only with `THIRD_PARTY_NOTICES.txt`, never as a substitute for providing corresponding source.
+| Keyword | Value | Required | Meaning |
+|---|---|:-:|---|
+| `swmminp` | file | yes | SWMM input file |
+| `floodconfig` | file | yes | manhole table ([§4](#4-the-floodconfig-table)); must be given together with `swmminp` |
+| `swmmrpt` | file | | SWMM report file |
+| `swmmout` | file | | SWMM binary results file |
+| `flooderror` | file | | log of node and outfall mapping decisions |
+| `coupleint` | `step` or seconds | | exchange after every 2-D step (`step`), or every *T* seconds |
+| `hsfdt` | seconds | | time at which to write hotstart files |
+| `hsfswmmtemp` | file | | SWMM hotstart written at `hsfdt` |
+| `hsffloodtemp` | file | | 2-D hotstart written at `hsfdt` |
+| `hsffloodend` | file | | 2-D hotstart written at the end of the run |
+| `hsffloodread` | file | | 2-D hotstart to start from |
+
+Leaving out both `swmminp` and `floodconfig` gives a standalone LISFLOOD-FP run.
+
+### Solver keywords for coupled runs
+
+| Keyword | Meaning |
+|---|---|
+| `cuda` | run the 2-D solver on the GPU (required for coupling) |
+| `acceleration` | local-inertia (ACC) solver |
+| `fv1` | first-order finite-volume (Godunov) solver |
+
+All other keywords (`DEMfile`, `startfile`, `sim_time`, `initial_tstep`, `massint`, `saveint`, `fpfric`, boundary and rainfall files, …) follow the LISFLOOD-FP 8.1 manual on [Zenodo](https://zenodo.org/records/6912932).
+
+### Example
+
+```text
+DEMfile         dem.asc
+startfile       start.asc
+resroot         syn
+dirroot         results
+sim_time        60.0
+initial_tstep   1.0
+massint         10.0
+saveint         60.0
+cuda
+acceleration
+
+swmminp         network.inp
+swmmrpt         network.rpt
+swmmout         network.out
+floodconfig     floodconfig.txt
+flooderror      flood_error.txt
+coupleint       step
+```
+
+## 6. Run
+
+Run from the case folder so that relative paths in the `.par` file resolve:
+
+```bash
+lisflood case.par
+```
+
+On Windows the binary package includes `run.ps1`, which runs the `lisflood.exe` next to it:
+
+```powershell
+.\run.ps1 path\to\case.par
+```
+
+At start-up the console reports the coupling interval (`SWMM coupling interval: step` or `… : 30.000 s`). The run ends with a line beginning `V11 END state=`, which gives the final state and the simulated time.
+
+## 7. Outputs
+
+| File | Written by | Content |
+|---|---|---|
+| `dirroot/resroot-*.wd`, `*.elev`, … | LISFLOOD-FP | depth and elevation rasters at every `saveint` |
+| `dirroot/resroot.max`, `*.mxe`, … | LISFLOOD-FP | maximum depth and related maxima |
+| `dirroot/resroot.mass` | LISFLOOD-FP | surface mass balance at every `massint` |
+| `dirroot/resroot.audit.log` | coupler | run settings, progress, coupled balance residual |
+| `dirroot/resroot.water_balance.csv` | coupler | 2-D and 1-D storage and every exchange term over time (m³) |
+| `swmmrpt` | SWMM | standard SWMM report, including its continuity errors |
+| `swmmout` | SWMM | binary time series, readable by SWMM GUI and `swmm-toolkit` |
+| `flooderror` | coupler | which nodes and outfalls were mapped to which cells, and why others were skipped |
+
+The columns of `water_balance.csv` are described in [methodology §10](coupling_methodology.md#10-water-balance-audit).
+
+## 8. Hotstart
+
+1. In the first run, set `hsfdt`, `hsfswmmtemp` and `hsffloodtemp` (or `hsffloodend`).
+2. In the next run, start the surface from the saved state with `hsffloodread`. Start SWMM from its saved state with a `USE HOTSTART` line in the SWMM `[FILES]` section.
+
+Hotstart files from versions without the coupling layer may attribute pipe storage differently. Regenerate them with this version.
+
+## 9. Troubleshooting
+
+| Message | Cause | Fix |
+|---|---|---|
+| `SWMM coupling requires both 'swmminp' and 'floodconfig'` | only one of the two keywords is set | give both, or neither for a standalone run |
+| `SWMM coupling requires CUDA acceleration or CUDA fv1` | coupled run without `cuda`, or with a solver other than ACC / FV1 | add `cuda` and `acceleration` or `fv1` |
+| `coupleint … is implemented for CUDA acceleration and CUDA fv1 only` | interval coupling with another solver | use `coupleint step` or switch solver |
+| `COUPLED requires continuous DYNWAVE and hydraulic-only routing` | SWMM routing is not `DYNWAVE`, has `[EVENTS]`, or routes pollutants | fix the SWMM `[OPTIONS]` |
+| `COUPLED outfall … has no valid LISFLOOD DEM cell` | outfall outside the DEM or on NoData | move the outfall, extend the DEM, or use an ordinary outfall type |
+| `flooded node … has no mapped 2D receiving cell` | a node floods but has no valid `floodconfig` row | add the node to `floodconfig`, or set its surcharge depth so it cannot flood |
+| `finite receiving cell … did not converge` | receiving-cell volume equation missed its tolerance | reduce SWMM `ROUTING_STEP` or `coupleint` |
+| `node … volume equation failed` | node volume equation missed its tolerance | reduce SWMM `ROUTING_STEP` |
+| `SWMM nonfinite state node=…` | SWMM produced NaN or Inf at a node | check that node's geometry and offsets; reduce `ROUTING_STEP` |
+| `remove swmmriveroutfalls` | parameter from an older version | delete the line; `COUPLED` outfalls are read from the SWMM input |
+
+If a run behaves unexpectedly but does not stop, check the `flooderror` log first. Most problems come from nodes that were not mapped to the cells you expected.
+
+## 10. Redistributing binaries
+
+- Source code and binaries built from it are GPL-2.0. A binary release must be accompanied by the corresponding source, or a written offer of it.
+- Microsoft (MSVC CRT, OpenMP) and Intel (OpenMP, math library) runtime DLLs in a binary archive are covered by their vendors' redistribution licences, not by the GPL. Include `THIRD_PARTY_NOTICES.txt` and do not commit these DLLs to git.

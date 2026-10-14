@@ -1,15 +1,20 @@
-﻿# Example 01 鈥?surface-only dry check
+﻿# Example 01: surface-only dry check
 
-Tiny DEM/start pair adapted from the in-tree CUDA ACC dry-check inputs.
-No SWMM coupling. Useful as a smoke test that the executable starts and writes mass/output files.
+A tiny DEM and initial-depth pair adapted from the upstream LISFLOOD-FP dry-check inputs. There is no SWMM network, so this case runs on any build, with or without a GPU.
+
+| File | Role |
+|---|---|
+| `case.par` | LISFLOOD-FP parameters, CPU ACC solver |
+| `dem.dem` | DEM |
+| `start.start` | initial water depth |
 
 ## Run
 
-```
+```bash
 lisflood case.par
 ```
 
-## Expected
+## Expected result
 
-- Completes `sim_time = 1 s`
-- Creates `results/` with mass and depth outputs prefixed `drycheck`
+- The run completes `sim_time = 1 s` without errors.
+- `results/` contains the mass-balance and depth files prefixed `drycheck`.

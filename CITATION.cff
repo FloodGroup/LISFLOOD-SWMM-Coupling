@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 title: "LISFLOOD-FP × SWMM bidirectional coupling"
-message: "If you use this software, please cite it and the upstream LISFLOOD-FP / SWMM works."
+message: "If you use this software, please cite it and the upstream LISFLOOD-FP and SWMM works."
 type: software
 authors:
   - family-names: Yang
@@ -8,14 +8,16 @@ authors:
     affiliation: FloodGroup
   - name: FloodGroup
 license: GPL-2.0-only
-repository-code: "https://github.com/FloodGroup/"
 abstract: >
-  Bidirectional coupling of LISFLOOD-FP (8.1.0 / commit 637106b) surface flood
-  modelling with EPA SWMM 5.1.015 sewer modelling, including COUPLED outfalls
-  and manhole weir/orifice exchange.
+  Two-way coupling of the GPU 2-D flood model LISFLOOD-FP (8.1.0, commit
+  637106b; CUDA ACC and FV1 solvers) with the 1-D sewer model EPA SWMM 5.1.015
+  in a single executable. Manholes exchange water through orifice and weir laws
+  in both directions, a new COUPLED outfall type discharges into finite-volume
+  2-D receiving cells, and SWMM node flooding is returned to the surface.
 keywords:
   - flood
   - LISFLOOD-FP
   - SWMM
   - coupling
-  - urban hydrology
+  - urban drainage
+  - GPU

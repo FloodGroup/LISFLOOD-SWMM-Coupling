@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
+  <defs>
+    <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EEE8DD"/>
+      <stop offset="1" stop-color="#E2D8C6"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8EB0CF"/>
+      <stop offset="1" stop-color="#4E7EA8"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#A3C0DA"/>
+      <stop offset="1" stop-color="#3F6F9A"/>
+    </linearGradient>
+    <linearGradient id="pipeWater" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9CC3B3"/>
+      <stop offset="1" stop-color="#4C8775"/>
+    </linearGradient>
+    <pattern id="dots" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="4" r="1.1" fill="#CFC2AA"/>
+      <circle cx="10" cy="11" r="0.9" fill="#CFC2AA"/>
+    </pattern>
+    <marker id="arrO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B4643A"/>
+    </marker>
+    <marker id="arrW" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ffffff"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="#ffffff"/>
+
+  <!-- buildings (silhouette) -->
+  <g fill="#E8E8E5">
+    <rect x="40" y="150" width="70" height="110" rx="2"/>
+    <rect x="118" y="124" width="48" height="136" rx="2"/>
+    <rect x="770" y="140" width="64" height="120" rx="2"/>
+    <rect x="842" y="170" width="46" height="90" rx="2"/>
+  </g>
+  <g fill="#ffffff">
+    <rect x="52" y="165" width="12" height="12"/><rect x="74" y="165" width="12" height="12"/>
+    <rect x="52" y="190" width="12" height="12"/><rect x="74" y="190" width="12" height="12"/>
+    <rect x="128" y="138" width="10" height="12"/><rect x="146" y="138" width="10" height="12"/>
+    <rect x="128" y="162" width="10" height="12"/><rect x="146" y="162" width="10" height="12"/>
+    <rect x="782" y="155" width="12" height="12"/><rect x="806" y="155" width="12" height="12"/>
+    <rect x="782" y="180" width="12" height="12"/><rect x="806" y="180" width="12" height="12"/>
+  </g>
+
+  <!-- soil body -->
+  <path d="M0,260 L900,260 L962,480 L1200,480 L1200,630 L0,630 Z" fill="url(#soil)"/>
+  <path d="M0,260 L900,260 L962,480 L1200,480 L1200,630 L0,630 Z" fill="url(#dots)"/>
+
+  <!-- river channel (receiving water) -->
+  <path d="M922,336 L1200,336 L1200,480 L962,480 Z" fill="url(#river)"/>
+  <path d="M922,336 Q960,330 1000,336 T1080,336 T1160,336 T1200,336" fill="none" stroke="#DCE7F1" stroke-width="2"/>
+
+  <!-- 2-D grid cells over the surface -->
+  <g stroke="#B7C9DB" stroke-width="1" stroke-dasharray="3 4">
+    <line x1="20" y1="214" x2="900" y2="214"/>
+    <line x1="922" y1="290" x2="1200" y2="290"/>
+  </g>
+  <g stroke="#B7C9DB" stroke-width="1">
+    <path d="M60,214 V260 M110,214 V260 M160,214 V260 M210,214 V260 M260,214 V260 M310,214 V260 M360,214 V260 M410,214 V260 M460,214 V260 M510,214 V260 M560,214 V260 M610,214 V260 M660,214 V260 M710,214 V260 M760,214 V260 M810,214 V260 M860,214 V260"/>
+    <path d="M960,290 V336 M1010,290 V336 M1060,290 V336 M1110,290 V336 M1160,290 V336"/>
+  </g>
+
+  <!-- flood water on the street -->
+  <path d="M150,260 L150,247 Q190,240 230,244 T310,242 T390,245 T470,243 L520,247 L520,260 Z" fill="url(#water)"/>
+  <path d="M560,260 L560,250 Q600,244 640,240 Q680,244 720,250 L740,260 Z" fill="url(#water)"/>
+
+  <!-- road surface -->
+  <rect x="0" y="258" width="900" height="7" fill="#5A5A5A"/>
+  <g stroke="#ffffff" stroke-width="2" stroke-dasharray="18 16">
+    <line x1="10" y1="261.5" x2="890" y2="261.5"/>
+  </g>
+
+  <!-- sewer pipe -->
+  <path d="M110,394 L954,428 L954,462 L110,428 Z" fill="#F4F4F2" stroke="#4D4D4D" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M110,412 L954,446 L954,462 L110,428 Z" fill="url(#pipeWater)"/>
+  <ellipse cx="110" cy="411" rx="7" ry="17" fill="#D9D9D6" stroke="#4D4D4D" stroke-width="2"/>
+  <g stroke="#ffffff" stroke-width="2.2" fill="none" marker-end="url(#arrW)">
+    <line x1="330" y1="426" x2="400" y2="429"/>
+    <line x1="760" y1="443" x2="830" y2="446"/>
+  </g>
+
+  <!-- manhole A: inlet drainage -->
+  <rect x="288" y="262" width="26" height="140" fill="#F4F4F2" stroke="#4D4D4D" stroke-width="2.5"/>
+  <rect x="290" y="300" width="22" height="101" fill="url(#pipeWater)"/>
+  <rect x="280" y="255" width="42" height="7" rx="2" fill="#333333"/>
+  <path d="M301,220 L301,300" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#arrO)"/>
+
+  <!-- manhole B: surcharge -->
+  <rect x="628" y="262" width="26" height="152" fill="url(#pipeWater)" stroke="#4D4D4D" stroke-width="2.5"/>
+  <rect x="620" y="255" width="42" height="7" rx="2" fill="#333333"/>
+  <path d="M641,250 Q630,226 616,214 M641,250 Q652,226 666,214 M641,250 L641,208" stroke="#7FA3C4" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M641,330 L641,212" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#arrO)"/>
+
+  <!-- COUPLED outfall exchange -->
+  <rect x="954" y="428" width="9" height="34" fill="#3F7F6E"/>
+  <path d="M975,436 L1040,436" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#arrO)"/>
+  <path d="M1040,454 L975,454" stroke="#B4643A" stroke-width="4" fill="none" marker-end="url(#arrO)"/>
+  <rect x="1060" y="290" width="50" height="190" fill="none" stroke="#B4643A" stroke-width="2" stroke-dasharray="6 4" rx="2"/>
+
+  <!-- numbered markers -->
+  <g font-weight="700" font-size="16" text-anchor="middle" fill="#ffffff">
+    <circle cx="340" cy="180" r="14" fill="#B4643A"/><text x="340" y="185.5">1</text>
+    <circle cx="684" cy="168" r="14" fill="#B4643A"/><text x="684" y="173.5">1</text>
+    <circle cx="1008" cy="406" r="14" fill="#B4643A"/><text x="1008" y="411.5">2</text>
+  </g>
+
+  <!-- callouts -->
+  <g font-size="16" fill="#222222">
+    <text x="364" y="176" font-weight="700">Inlet drainage</text>
+    <text x="364" y="196" font-size="15" fill="#666666">surface &#8594; sewer</text>
+    <text x="708" y="164" font-weight="700">Surcharge</text>
+    <text x="708" y="184" font-size="15" fill="#666666">sewer &#8594; surface</text>
+    <text x="1085" y="276" text-anchor="middle" font-weight="700" fill="#8A4521">receiving 2-D cell</text>
+    <text x="984" y="510" font-weight="700">COUPLED outfall</text>
+    <text x="984" y="530" font-size="15" fill="#666666">two-way, volume-conserving</text>
+  </g>
+
+  <!-- domain labels -->
+  <rect x="180.5" y="36.5" width="400" height="74" rx="8" fill="#ffffff" stroke="#C9D7E5"/>
+  <rect x="180" y="36" width="6" height="75" rx="3" fill="#3F6F9A"/>
+  <text x="204" y="66" font-size="19" font-weight="700" fill="#2C5577">2-D surface &#183; LISFLOOD-FP 8.1</text>
+  <text x="204" y="92" font-size="15" fill="#555555">CUDA ACC / FV1 shallow-water solvers on a DEM</text>
+
+  <rect x="180.5" y="520.5" width="400" height="74" rx="8" fill="#ffffff" stroke="#C3D9CF"/>
+  <rect x="180" y="520" width="6" height="75" rx="3" fill="#3F7F6E"/>
+  <text x="204" y="550" font-size="19" font-weight="700" fill="#2A5E51">1-D sewer &#183; EPA SWMM 5.1.015</text>
+  <text x="204" y="576" font-size="15" fill="#555555">dynamic-wave routing of junctions and conduits</text>
+
+  <!-- legend -->
+  <rect x="610.5" y="36.5" width="560" height="74" rx="8" fill="#ffffff" stroke="#E5CBB9"/>
+  <g font-size="15" fill="#222222">
+    <circle cx="636" cy="61" r="11" fill="#B4643A"/><text x="636" y="66" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">1</text>
+    <text x="656" y="66"><tspan font-weight="700">Manhole exchange</tspan><tspan fill="#666666">: orifice / weir law, either direction</tspan></text>
+    <circle cx="636" cy="89" r="11" fill="#B4643A"/><text x="636" y="94" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">2</text>
+    <text x="656" y="94"><tspan font-weight="700">COUPLED outfall</tspan><tspan fill="#666666">: finite-volume receiving cell, integrated &#916;V</tspan></text>
+  </g>
+</svg>

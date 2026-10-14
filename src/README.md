@@ -1,65 +1,49 @@
-# Compilation
-LISFLOOD-FP can be compiled on Windows or Linux using [CMake](https://cmake.org) version 3.13 or above.
+# Source map
 
-## Compiling on Windows with the MSVC compiler
-Launch Visual Studio 2019 and open `lisflood-fp` as a local folder.
-Choose the `msvc-x64-Debug` or `msvc-x64-Release` configuration, then `Rebuild All`.
+`src/` contains LISFLOOD-FP, SWMM and the coupling layer. All of it is compiled into one executable, `lisflood`, by `CMakeLists.txt`. For build instructions, see the [user guide](../docs/user_guide.md#2-build).
 
-## Compiling on Windows with the Intel compiler
-Close Visual Studio, then run `launch_vs2019_intel64.bat`, which assumes that Visual Studio 2019 Community Edition is installed (the `.bat` script sets the necessary environment variables for Visual Studio to locate the Intel compiler).
-Choose the `intel-x64-Debug` or `intel-x64-Release` configuration, then `Rebuild All`.
-Once launched from the `.bat` file, Visual Studio can compile with either MSVC or Intel compiler by choosing the appropriate configuration.
+## Upstream baselines
 
-## Running or debugging on Windows
-To run `lisflood.exe` from Visual Studio, switch the `Solution Explorer` to `CMake Targets View`, the `Add Debug Configuration` to `lisflood (executable)` (see the [Visual Studio documentation](https://docs.microsoft.com/en-us/cpp/build/configure-cmake-debugging-sessions) for more details).
+| Component | Baseline |
+|---|---|
+| LISFLOOD-FP | development commit `637106b` (2022-04-20), reported as 8.1.0 in `VersionHistory.h` |
+| EPA SWMM | 5.1.015 (`VERSION 51015` in `consts.h`) |
 
-## Compiling on Linux
+Relative to these baselines, the release modifies 64 files (47 LISFLOOD-FP, 17 SWMM) and adds the coupling sources below.
 
-Ensure a recent version of CMake is installed.
-Also ensure `libnuma-dev` is installed and, for NetCDF output and dynamic rainfall support, ensure `libnetcdf-dev` is also installed.  On Ubuntu:
+## Coupling layer (new files)
 
-````bash
-sudo snap install cmake --classic
-sudo apt install libnuma-dev libnetcdf-dev
-````
+| File | Role |
+|---|---|
+| `swmm_couple.h` | exchange clock: `coupleint`, clipping dt to the interval, volume accumulation |
+| `coupled_boundary.c` / `.h` | `COUPLED` outfalls: receiving-cell volumes, donor limits, backward-Euler node update, exchange volumes |
+| `cuda/cuda_coupling_gather.cuh` | gather of coupled-cell depths from GPU to host |
+| `cuda/run_audit.cuh` | `<resroot>.audit.log` and `<resroot>.water_balance.csv` |
 
-Then open a terminal at in the root `lisflood-fp` directory:
+## Modified upstream areas
 
-````bash
-cmake -S . -B build
-cmake --build build
-````
+| Area | Files | Change |
+|---|---|---|
+| Build | `CMakeLists.txt`, `config.default.cmake` | SWMM and the coupling layer are compiled into `lisflood` |
+| Parameters | `pars.cpp`, `lisflood.h`, `lisflood.cpp` | coupling keywords; checks that coupled runs use CUDA ACC or FV1 |
+| CUDA drivers | `cuda/acc/cuda_acc_simulate.cu`, `cuda/fv1/cuda_fv1_simulate.cu` | exchange cycle inside the 2-D time loop |
+| Mapping and exchange | `cuda/cuda_dem.cu`, `cuda/cuda_dem.cuh` | `floodconfig` reader, node ? cell mapping, manhole discharge (`cal_flow_exchange`), outfall and flooding sources |
+| Point sources | `cuda/cuda_boundary.cu` | exchange discharge injected as 2-D sources |
+| SWMM core | `swmm5.c` / `.h`, `routing.c`, `dynwave.c`, `node.c`, `enums.h`, `keywords.c`, `text.h`, … | `COUPLED` outfall type, coupling API, volume hooks |
+| Hotstart | `chkpnt.cpp`, `hotstart.c` | coupled surface and SWMM checkpoints |
+| CPU solvers | `iterateq.cpp`, `swe/fv1.cpp`, `swe/dg2.cpp` | legacy CPU exchange routines; not reachable, because coupled runs require CUDA |
 
-The `lisflood` executable is written to the `build` directory.
-If `libnuma` is installed in a non-standard location, use
+## Upstream layout
 
-````bash
-cmake -S . -B build -DNUMA_ROOT=<path>
-cmake --build build
-````
-
-## Customising the build
-The default build configuration is given in `config.default.cmake`. To customise the build, copy and modify this file.
-Then, in Windows, edit the appropriate configuration in `CMakeSettings.json`:
-````json
-"configurations": [
-  {
-    "name": "msvc-x64-Debug",
-    …
-    "cmakeCommandArgs": "-D_CONFIG=<filename>",
-    …
-  }
-  …
-]
-````
-
-Or, in Linux:
-
-````bash
-cmake -S . -B build -D_CONFIG=<filename>
-cmake --build build
-````
-
-## NVIDIA CUDA support
-CMake automatically compiles LISFLOOD-FP FV1 and DG2 CUDA solvers if the [NVIDIA CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) is installed.
-To customise the CUDA compute capabilities, see `config.default.cmake`.
+| Path | Content |
+|---|---|
+| `*.cpp`, `lisflood.h` | LISFLOOD-FP CPU core: input, output, boundaries, ACC solver |
+| `*.c`, `*.h` (lower-case SWMM names) | EPA SWMM 5.1.015 engine |
+| `cuda/` | LISFLOOD-FP GPU solvers (`acc/`, `fv1/`, `fv2/`, `dg2/`, `acc_nugrid/`) and shared kernels |
+| `swe/` | CPU FV1 / DG2 shallow-water solvers |
+| `lisflood2/` | sub-grid channel model |
+| `rain/` | rainfall input, including NetCDF |
+| `preprocess/`, `postprocess/` | auxiliary tools (`generateDG2DEM`, `generateDG2start`, …) |
+| `test/` | unit tests (Catch) |
+| `windep/` | NetCDF headers for Windows builds |
+| `cmake/` | CMake helper modules |

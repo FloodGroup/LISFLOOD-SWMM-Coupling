@@ -231,8 +231,7 @@ if (CMAKE_CUDA_COMPILER)
 		cuda/acc_nugrid/write_chkpnt.cu
 		cuda/acc_nugrid/read_chkpnt.cu
 	)
-	# Prefer the CUB version bundled with the active CUDA toolkit.  The legacy
-	# in-tree cuda/cub copy uses texture references removed by CUDA 12.
+	# CUB is taken from the CUDA toolkit (CUDA >= 11 ships it).
 	target_include_directories(lisflood BEFORE PUBLIC
 			${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 	target_include_directories(lisflood PUBLIC cuda cuda/common)

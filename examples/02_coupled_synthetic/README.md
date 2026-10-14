@@ -1,26 +1,37 @@
-# Example 02 — synthetic coupled case (**synthetic**)
+# Example 02: synthetic coupled case
 
-This case is **constructed for the open-source layout**. It is not a calibrated study site.
+A minimal coupled case for checking that a build reads and maps all coupling inputs. It is synthetic, not a calibrated study site.
 
-## Files
+```text
+     100 m × 100 m flat DEM, 10 m cells, z = 10 m
+
+             J1 (45, 45)        OF1 (55, 45)
+   surface ────■──────────────────■────────
+               │ invert 9.0 m     │ COUPLED outfall, invert 8.5 m
+               └────── C1 ────────┘
+```
 
 | File | Role |
 |---|---|
-| `case.par` | LISFLOOD-FP controls + `swmminp` / `floodconfig` / `coupleint` |
-| `dem.asc` | 10×10 flat DEM (10 m cells), elevation 10 m |
-| `start.asc` | Initial depth 0 |
-| `network.inp` | SWMM network: junction J1, COUPLED outfall OF1, one conduit |
-| `floodconfig.txt` | Vertical connection table for J1 |
-| `expected.md` | Qualitative expected behaviour |
+| `case.par` | LISFLOOD-FP parameters (`cuda`, `acceleration`) and coupling keywords |
+| `dem.asc` | 10 × 10 flat DEM, elevation 10 m |
+| `start.asc` | initial depth, 0 everywhere |
+| `network.inp` | SWMM network: junction `J1`, `COUPLED` outfall `OF1`, conduit `C1`, `DYNWAVE` routing |
+| `floodconfig.txt` | manhole table with one row for `J1` (node index 0) |
+| `expected.md` | expected behaviour |
 
 ## Run
 
-```text
+Requires a CUDA build and an NVIDIA GPU, because coupled runs use the CUDA solvers.
+
+```bash
 lisflood case.par
 ```
 
-Requires a build with SWMM coupling enabled (default in this repository). CUDA is optional for this tiny grid; CPU acceleration path may be used depending on flags in `case.par`.
+To try the FV1 solver, replace `acceleration` with `fv1` in `case.par`. To exchange at a fixed interval, set `coupleint` to a number of seconds (for example `coupleint 5`).
 
-## Note
+## Inspect
 
-If your binary was built with CUDA-only coupling intervals, keep `coupleint step` as shipped.
+- `flood_error.txt` has no `out of DEM range` line for `J1`, and has one `V8 COUPLED tailwater: OF1 -> DEM index …` line.
+- `results/syn.water_balance.csv` lists every exchange term over time; `combined_balance_residual_m3` should stay near zero.
+- `network.rpt` is the standard SWMM report.

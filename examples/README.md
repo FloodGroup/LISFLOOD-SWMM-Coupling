@@ -1,20 +1,21 @@
 # Examples
 
-Each subdirectory is a small, self-contained case (< 5 MB).
+Two small, self-contained cases for checking a build.
 
-| Case | Type | Notes |
+| Case | Solver | What it checks |
 |---|---|---|
-| `01_surface_only_drycheck` | Surface only | Tiny DEM from the upstream-style dry-check suite; no SWMM |
-| `02_coupled_synthetic` | **Synthetic** coupled | Minimal DEM + SWMM `.inp` with one `COUPLED` outfall + one junction inlet; for layout demonstration |
+| [`01_surface_only_drycheck`](01_surface_only_drycheck/) | CPU ACC, no SWMM | the executable starts and writes output |
+| [`02_coupled_synthetic`](02_coupled_synthetic/) | CUDA ACC + SWMM | coupled input wiring: one junction inlet, one `COUPLED` outfall |
 
-## How to run
+## Running a case
 
-1. Build `lisflood` (see `docs/user_guide.md`).
-2. Copy the executable (and NetCDF DLLs on Windows) next to the case, or put them on `PATH`.
-3. From the case directory:
+1. Build `lisflood` ([user guide §2](../docs/user_guide.md#2-build)).
+2. Put the executable on your `PATH`, or copy it (and on Windows its DLLs) into the case folder.
+3. Run from the case folder so that relative paths resolve:
 
-```text
+```bash
+cd examples/02_coupled_synthetic
 lisflood case.par
 ```
 
-Expected outputs are described in each case `README.md`.
+Results are written to `results/` inside the case folder. Each case README lists what to expect.
