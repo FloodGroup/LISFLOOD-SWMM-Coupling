@@ -1,10 +1,26 @@
 # User guide
 
+Practical steps to obtain, build, and run the LISFLOOD-FP × SWMM coupling. Equations and exchange logic live in [`coupling_methodology.md`](coupling_methodology.md).
+
+## Contents
+
+- [1. Obtain the code](#1-obtain-the-code)
+- [2. Build from source](#2-build-from-source)
+- [3. Run a simulation](#3-run-a-simulation)
+- [4. SWMM input for coupling](#4-swmm-input-for-coupling)
+- [5. Outputs](#5-outputs)
+- [6. Hotstart](#6-hotstart)
+- [7. Licence reminders when redistributing binaries](#7-licence-reminders-when-redistributing-binaries)
+
+---
+
 ## 1. Obtain the code
 
 Clone or download this repository. All compilable sources are under `src/`. Documentation is under `docs/`. Small runnable cases are under `examples/`.
 
-Optional Windows binaries (not in git) are packaged separately for GitHub Releases; see the repository README.
+> 📦 Optional Windows binaries (not in git) are packaged separately for GitHub Releases; see the repository [README](../README.md).
+
+---
 
 ## 2. Build from source
 
@@ -43,6 +59,8 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=75
 cmake --build build --target lisflood -j
 ```
 
+---
+
 ## 3. Run a simulation
 
 ```text
@@ -65,12 +83,14 @@ Working directory is typically the case folder so relative paths in `.par` resol
 | `swmmout` | `network.out` | SWMM binary out |
 | `coupleint` | `step` or `1.0` | Exchange every 2-D step, or every *N* seconds |
 
-Without `swmminp`, the model runs as standalone LISFLOOD-FP (no sewer coupling).
+> Without `swmminp`, the model runs as standalone LISFLOOD-FP (no sewer coupling).
 
 Upstream LISFLOOD-FP parameters (friction, boundary files, rainfall, …) follow the official manuals:
 
 - LISFLOOD-FP 8.1 on Zenodo: <https://zenodo.org/records/6912932>
 - EPA SWMM: <https://www.epa.gov/water-research/storm-water-management-model-swmm>
+
+---
 
 ## 4. SWMM input for coupling
 
@@ -78,7 +98,7 @@ Upstream LISFLOOD-FP parameters (friction, boundary files, rainfall, …) follow
 
 In the `[OUTFALLS]` section, use type **`COUPLED`** instead of `FREE` / `NORMAL` / `FIXED` / … for nodes that exchange volume with the 2-D surface. The coupler maps each such outfall to a DEM cell and updates an external stage from the cell water surface (`coupled_set_cell` in `coupled_boundary.c`).
 
-Coupled runs require **continuous dynamic-wave** routing (`ROUTING DYNWAVE`), no routing `EVENTS`, and hydraulic-only routing when pollutants would otherwise be active (`coupled_open`).
+> ⚠️ Coupled runs require **continuous dynamic-wave** routing (`ROUTING DYNWAVE`), no routing `EVENTS`, and hydraulic-only routing when pollutants would otherwise be active (`coupled_open`).
 
 ### Manhole / inlet table (`floodconfig`)
 
@@ -108,13 +128,19 @@ ID      Index      Orifice_QCoef      Pond_Area      Max_Qout      Weir_QCoef   
 
 Exchange discharge is computed in `cal_exchange_flow` (`iterateq.cpp`) from the SWMM node head, the surface water level and the crest elevation. Every active branch uses the orifice equation: sewer → surface with $C_0, A_0$ (capped by `Max_Qout`), and surface → sewer with $C_1, A_1$ in both the free and the submerged case (capped by `Max_Qin` and by the water in the cell). The weir equation is in the source but commented out. The three branches are written out in [`coupling_methodology.md`](coupling_methodology.md). The signed result is stored in `Vconnect::flow_1D_node` and passed to SWMM as `Node_Inflow`.
 
+---
+
 ## 5. Outputs
 
 Standard LISFLOOD-FP rasters / mass files appear under `dirroot`. SWMM writes `swmmrpt` / `swmmout`. Coupling builds may also emit mass-audit / exchange diagnostics depending on solver flags (see `cuda/cuda_stats.*`).
 
+---
+
 ## 6. Hotstart
 
 Surface and SWMM hotstart paths were extended for coupled states (`chkpnt.cpp`, `hotstart.c`). Prefer rebuilding hotstarts with the same coupling version; mixing with pre-coupling hotstarts can disagree on pipe storage definitions.
+
+---
 
 ## 7. Licence reminders when redistributing binaries
 

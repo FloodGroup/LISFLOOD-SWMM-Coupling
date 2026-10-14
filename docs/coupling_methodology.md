@@ -2,6 +2,22 @@
 
 This document describes the bidirectional surface–sewer coupling implemented in this repository. Every formula and behavioural claim cites the implementing file and function. Internal SWMM storage uses US customary units (feet, ft³, s); the public exchange API converts to SI (m, m³) with the factor `0.028316846592` ft³ → m³ (`coupled_boundary.c`).
 
+## Contents
+
+- [Overview](#overview)
+- [What was changed relative to upstream](#what-was-changed-relative-to-upstream)
+- [Coupling modes](#coupling-modes)
+  - [A. COUPLED outfalls ↔ receiving 2-D cells](#a-coupled-outfalls--receiving-2-d-cells-volume-control-volumes)
+  - [B. Manhole inlets](#b-manhole-inlets-surface--sewer)
+  - [Manhole exchange formulas](#manhole-exchange-formulas-implemented)
+- [Time synchronisation](#time-synchronisation)
+- [GPU path](#gpu-path)
+- [Governing equations](#governing-equations-unchanged-physics-engines)
+- [Schematic: outfall receiving cell](#schematic-outfall-receiving-cell)
+- [References in tree](#references-in-tree)
+
+---
+
 ## Overview
 
 ```mermaid
@@ -14,7 +30,7 @@ flowchart LR
     CLOCK["SwmmCoupleClock\n(swmm_couple.h)"]
     GATHER["gather_coupling_depths\n(cuda_coupling_gather.cuh)"]
     CB["coupled_boundary.c\nvolume CV + limits"]
-    VIN["Manhole inlet Q\n(weir / orifice)"]
+    VIN["Manhole inlet Q\n(orifice)"]
   end
   subgraph Sewer["1-D sewer (SWMM 5.1.015)"]
     DW["Dynamic wave\n(dynwave.c)"]
@@ -34,6 +50,10 @@ flowchart LR
 
 ![Coupling overview](figures/coupling_overview.png)
 
+*Figure. Bidirectional coupling overview — 2-D surface solvers, exchange layer (clock, GPU gather, volume CVs, manhole orifice), and SWMM dynamic wave.*
+
+---
+
 ## What was changed relative to upstream
 
 1. **New files**: `coupled_boundary.c` / `.h`, `swmm_couple.h`, `cuda/cuda_coupling_gather.cuh` (plus packaging / build helpers).
@@ -41,6 +61,8 @@ flowchart LR
 3. **SWMM (~17 files)**: new outfall type `COUPLED_OUTFALL`; coupling APIs in `swmm5.c`; dynamic-wave hooks; volume accounting.
 
 Full file list: [`CHANGES.md`](../CHANGES.md).
+
+---
 
 ## Coupling modes
 
@@ -91,13 +113,13 @@ $$
 
 returned to LISFLOOD in m³ via `coupled_exchange()` (= `exchange * 0.028316846592`).
 
-Note: at a COUPLED outfall the `end_volume` weight is always 0 (the outfall is an exchange face, not a storage node), so $V_{end}^{n+1} - V_{end}^{n} = 0$ and the credited volume reduces to $\Delta V_{ex} = Q_{net} \Delta t$. The general form is kept to match `coupled_commit`.
+> **Note.** At a COUPLED outfall the `end_volume` weight is always 0 (the outfall is an exchange face, not a storage node), so $V_{end}^{n+1} - V_{end}^{n} = 0$ and the credited volume reduces to $\Delta V_{ex} = Q_{net} \Delta t$. The general form is kept to match `coupled_commit`.
 
-Requirements (`coupled_open`): continuous **DYNWAVE** routing, no routing `EVENTS`, hydraulic-only (no quality) when pollutants are present.
+> ⚠️ **Requirements** (`coupled_open`): continuous **DYNWAVE** routing, no routing `EVENTS`, hydraulic-only (no quality) when pollutants are present.
 
 ### B. Manhole inlets (surface → sewer)
 
-Vertical connections are described by a text table named in the `.par` file with the keyword `floodconfig` (format in `docs/user_guide.md`; example in `examples/02_coupled_synthetic/floodconfig.txt`). Each row gives the orifice coefficient and area for sewer → surface flow, the maximum outflow, the weir coefficient and crest length (currently unused), the maximum inflow, and the orifice coefficient and area for surface → sewer flow. Runtime structures are `Vconnect` in `geometry.h` (`node_Vindex`, `flow_1D_node`, …).
+Vertical connections are described by a text table named in the `.par` file with the keyword `floodconfig` (format in [`docs/user_guide.md`](user_guide.md); example in `examples/02_coupled_synthetic/floodconfig.txt`). Each row gives the orifice coefficient and area for sewer → surface flow, the maximum outflow, the weir coefficient and crest length (currently unused), the maximum inflow, and the orifice coefficient and area for surface → sewer flow. Runtime structures are `Vconnect` in `geometry.h` (`node_Vindex`, `flow_1D_node`, …).
 
 Inlet discharges computed for the 2-D → 1-D direction are accumulated into `Node_Inflow[]` and applied through `coupled_sync_inlets()` when `ADDLINK == 1`. The interval-average rate is held constant on both ends of SWMM’s trapezoidal lateral-flow integration.
 
@@ -119,16 +141,19 @@ Logic in `cal_exchange_flow` (tolerance `COUPLING_HEAD_TOL`):
    $$Q = \min\left( C_0 A_0 \sqrt{2 g (H_{1D} - H_{2D})},\ Q_{out,max} \right)$$
 
    `flow_1D_node = -Q`, `flow_2D_node = +Q` (uses `node_c0`, `node_area`, `node_qoutmax`).
+
 2. **Surface → sewer, free inflow** when $H_{1D} \le Z + \epsilon$ and $H_{2D} - Z > \epsilon$ (sewer head at or below the crest, surface water above it):
 
    $$Q = C_1 A_1 \sqrt{2 g (H_{2D} - H_{1D})}$$
 
    `flow_1D_node = +Q`, `flow_2D_node = -Q` (uses `node_c1`, `node_area1`). The original weir form $Q = C_w w (H_{2D}-Z) \sqrt{2 g (H_{2D}-Z)}$ (`weirflow_cal(node_cw, node_w, H2D - Z)`) is still in the source but **commented out**, so this branch is currently an orifice, not a weir. `node_cw` / `node_w` are read but unused.
+
 3. **Surface → sewer, submerged inflow** when $H_{1D} \ge Z - \epsilon$ and $H_{2D} - H_{1D} > \epsilon$ (sewer head at or above the crest, surface head higher still):
 
    $$Q = C_1 A_1 \sqrt{2 g (H_{2D} - H_{1D})}$$
 
    Same coefficients and sign convention as branch 2.
+
 4. **No exchange** otherwise, and for any connection with `dem_Vindex == -9999` (outside the DEM, or an OUTFALL / STORAGE / DIVIDER node): $Q = 0$.
 
 Here $\epsilon$ = `COUPLING_HEAD_TOL`. The branches are tested in the order 1 → 2 → 3, so branch 3 applies only when branches 1 and 2 do not.
@@ -141,10 +166,13 @@ Sewer → surface rates are capped only by $Q_{out,max}$ in branch 1.
 
 The `.par` keyword **`floodconfig`** points to the vertical-connection table (`pars.cpp`).
 
+---
+
 ## Time synchronisation
 
 ![Exchange clock](figures/time_sync.png)
 
+*Figure. Exchange clock (`SwmmCoupleClock`) — every 2-D step vs fixed interval, with `swmm_couple_clip_dt` landing exchanges on interval boundaries.*
 
 `SwmmCoupleClock` (`swmm_couple.h`):
 
@@ -152,6 +180,8 @@ The `.par` keyword **`floodconfig`** points to the vertical-connection table (`p
 - `coupleint <seconds>`: accumulate 2-D volumes until elapsed time reaches the interval (or sim / SWMM end), then exchange once.
 - `swmm_couple_clip_dt` shortens the 2-D `dt` so exchange times land exactly on the interval.
 - Inside each exchange window SWMM advances with its native dynamic-wave sub-steps; volumes passed to 2-D are **integrated**, not instantaneous \(Q\times\Delta t_{\mathrm{couple}}\) approximations (`coupled_commit` / SWMM `swmm_advanceCoupled` API in `swmm5.c`).
+
+---
 
 ## GPU path
 
@@ -161,7 +191,9 @@ For CUDA ACC / FV1:
 2. Host runs SWMM + `coupled_boundary` for the interval.
 3. Exchange volumes / stages are written back as point sources through `cuda/cuda_boundary.cu` (ordered updates when multiple sources share a cell).
 
-`coupleint` with a positive interval is implemented for **CUDA acceleration** and **CUDA fv1** only (`pars.cpp` validation).
+> ⚠️ `coupleint` with a positive interval is implemented for **CUDA acceleration** and **CUDA fv1** only (`pars.cpp` validation).
+
+---
 
 ## Governing equations (unchanged physics engines)
 
@@ -172,6 +204,8 @@ For CUDA ACC / FV1:
 | Coupled subgraph continuity | Backward Euler finite-volume update above | `coupled_boundary.c` |
 
 Momentum in conduits remains SWMM’s dynamic wave; only the **continuity / storage attribution** for components that contain `COUPLED` outfalls is replaced.
+
+---
 
 ## Schematic: outfall receiving cell
 
@@ -191,6 +225,10 @@ flowchart TB
 ```
 
 ![Outfall schematic](figures/outfall_schematic.png)
+
+*Figure. COUPLED outfall as an exchange face — full pipe storage on the interior node, zero half-pipe storage on the outfall; $\Delta V_{ex}$ integrated against the 2-D receiving cell.*
+
+---
 
 ## References in tree
 
