@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0 — first public release
+## 1.0.0 - first public release
 
 Two-way coupling of LISFLOOD-FP and EPA SWMM in a single Windows executable.
 
