@@ -5,6 +5,7 @@
 **Two-way coupling of a GPU 2-D surface flood model and a 1-D urban drainage model**
 
 [![Licence: GPL-2.0](https://img.shields.io/badge/licence-GPL--2.0-2C5577.svg)](LICENSE)
+[![Release v1.0.0](https://img.shields.io/badge/release-v1.0.0-2E7D5B.svg)](https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling/releases/tag/v1.0.0)
 [![LISFLOOD-FP 8.1](https://img.shields.io/badge/LISFLOOD--FP-8.1.0-3F6F9A.svg)](https://zenodo.org/records/6912932)
 [![EPA SWMM 5.1.015](https://img.shields.io/badge/EPA%20SWMM-5.1.015-3F7F6E.svg)](https://github.com/USEPA/Stormwater-Management-Model)
 [![CUDA](https://img.shields.io/badge/CUDA-required%20for%20coupling-B4643A.svg)](https://developer.nvidia.com/cuda-toolkit)
@@ -142,4 +143,4 @@ If you use this software, please cite it using [`CITATION.cff`](CITATION.cff) (G
 
 - LISFLOOD-FP: University of Bristol Hydrology Research Group and contributors
 - EPA SWMM: U.S. Environmental Protection Agency
-- Coupling layer: Ruiyi Yang and FloodGroup
+- Coupling layer: FloodGroup
