@@ -34,16 +34,16 @@
   <g fill="#E8E8E5">
     <rect x="40" y="150" width="70" height="110" rx="2"/>
     <rect x="118" y="124" width="48" height="136" rx="2"/>
-    <rect x="770" y="140" width="64" height="120" rx="2"/>
-    <rect x="842" y="170" width="46" height="90" rx="2"/>
+    <rect x="800" y="140" width="56" height="120" rx="2"/>
+    <rect x="862" y="176" width="34" height="84" rx="2"/>
   </g>
   <g fill="#ffffff">
     <rect x="52" y="165" width="12" height="12"/><rect x="74" y="165" width="12" height="12"/>
     <rect x="52" y="190" width="12" height="12"/><rect x="74" y="190" width="12" height="12"/>
     <rect x="128" y="138" width="10" height="12"/><rect x="146" y="138" width="10" height="12"/>
     <rect x="128" y="162" width="10" height="12"/><rect x="146" y="162" width="10" height="12"/>
-    <rect x="782" y="155" width="12" height="12"/><rect x="806" y="155" width="12" height="12"/>
-    <rect x="782" y="180" width="12" height="12"/><rect x="806" y="180" width="12" height="12"/>
+    <rect x="810" y="155" width="12" height="12"/><rect x="834" y="155" width="12" height="12"/>
+    <rect x="810" y="180" width="12" height="12"/><rect x="834" y="180" width="12" height="12"/>
   </g>
 
   <!-- soil body -->
@@ -120,22 +120,22 @@
   </g>
 
   <!-- domain labels -->
-  <rect x="180.5" y="36.5" width="400" height="74" rx="8" fill="#ffffff" stroke="#C9D7E5"/>
-  <rect x="180" y="36" width="6" height="75" rx="3" fill="#3F6F9A"/>
-  <text x="204" y="66" font-size="19" font-weight="700" fill="#2C5577">2-D surface &#183; LISFLOOD-FP 8.1</text>
-  <text x="204" y="92" font-size="15" fill="#555555">CUDA ACC / FV1 shallow-water solvers on a DEM</text>
+  <rect x="40.5" y="36.5" width="430" height="74" rx="8" fill="#ffffff" stroke="#C9D7E5"/>
+  <rect x="40" y="36" width="6" height="75" rx="3" fill="#3F6F9A"/>
+  <text x="64" y="66" font-size="19" font-weight="700" fill="#2C5577">2-D surface &#183; LISFLOOD-FP 8.1</text>
+  <text x="64" y="92" font-size="15" fill="#555555">ACC / FV1 shallow-water solvers on a DEM, CPU or GPU</text>
 
-  <rect x="180.5" y="520.5" width="400" height="74" rx="8" fill="#ffffff" stroke="#C3D9CF"/>
-  <rect x="180" y="520" width="6" height="75" rx="3" fill="#3F7F6E"/>
-  <text x="204" y="550" font-size="19" font-weight="700" fill="#2A5E51">1-D sewer &#183; EPA SWMM 5.1.015</text>
-  <text x="204" y="576" font-size="15" fill="#555555">dynamic-wave routing of junctions and conduits</text>
+  <rect x="40.5" y="520.5" width="430" height="74" rx="8" fill="#ffffff" stroke="#C3D9CF"/>
+  <rect x="40" y="520" width="6" height="75" rx="3" fill="#3F7F6E"/>
+  <text x="64" y="550" font-size="19" font-weight="700" fill="#2A5E51">1-D sewer &#183; EPA SWMM 5.1.015</text>
+  <text x="64" y="576" font-size="15" fill="#555555">dynamic-wave routing of junctions and conduits</text>
 
   <!-- legend -->
-  <rect x="610.5" y="36.5" width="560" height="74" rx="8" fill="#ffffff" stroke="#E5CBB9"/>
+  <rect x="530.5" y="36.5" width="630" height="74" rx="8" fill="#ffffff" stroke="#E5CBB9"/>
   <g font-size="15" fill="#222222">
-    <circle cx="636" cy="61" r="11" fill="#B4643A"/><text x="636" y="66" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">1</text>
-    <text x="656" y="66"><tspan font-weight="700">Manhole exchange</tspan><tspan fill="#666666">: orifice / weir law, either direction</tspan></text>
-    <circle cx="636" cy="89" r="11" fill="#B4643A"/><text x="636" y="94" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">2</text>
-    <text x="656" y="94"><tspan font-weight="700">COUPLED outfall</tspan><tspan fill="#666666">: finite-volume receiving cell, integrated &#916;V</tspan></text>
+    <circle cx="556" cy="61" r="11" fill="#B4643A"/><text x="556" y="66" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">1</text>
+    <text x="576" y="66"><tspan font-weight="700">Manhole exchange</tspan><tspan fill="#666666">: orifice and weir laws, either direction</tspan></text>
+    <circle cx="556" cy="89" r="11" fill="#B4643A"/><text x="556" y="94" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">2</text>
+    <text x="576" y="94"><tspan font-weight="700">COUPLED outfall</tspan><tspan fill="#666666">: finite-volume receiving cell, integrated &#916;V</tspan></text>
   </g>
 </svg>

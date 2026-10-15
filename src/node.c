@@ -1294,7 +1294,7 @@ void outfall_setOutletDepth(int j, double yNorm, double yCrit, double z)
     int      i = Node[j].subIndex;     // outfall index
     DateTime currentDate;              // current date/time in days
 
-    // V8: only COUPLED outfalls receive their stage from the mapped 2D water
+    // Only COUPLED outfalls receive their stage from the mapped 2D water
     // surface. All standard SWMM outfall types retain their original behavior.
     if ( Outfall[i].externalStageActive )
     {

@@ -121,7 +121,7 @@ public:
             const size_t n=netcdf_.tlen;
             double coverage=(2.0*(double)netcdf_.times[n-1]-netcdf_.times[n-2])*3600.0;
             if ((double)end>coverage+1.e-4) {
-                fprintf(stderr,"V11 rainfall coverage ends at %.9g s, requested %.9g s: %s\n",coverage,(double)end,netcdf_.source_name);
+                fprintf(stderr,"rainfall coverage ends at %.9g s, requested %.9g s: %s\n",coverage,(double)end,netcdf_.source_name);
                 exit(EXIT_FAILURE);
             }
         }

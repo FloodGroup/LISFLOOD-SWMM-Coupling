@@ -149,7 +149,7 @@ void CheckParam(char* param_name, char* param_value_ptr, int line_number, Fnames
 		return;
 	if (STRCMPi(param_name, "swmmriveroutfalls") == 0)
 	{
-		fprintf(stderr, "V8: remove swmmriveroutfalls; COUPLED outfalls are selected from the SWMM INP automatically (line %d).\n", line_number);
+		fprintf(stderr, "remove swmmriveroutfalls; COUPLED outfalls are selected from the SWMM INP automatically (line %d).\n", line_number);
 		exit(1);
 	}
 	if (STRCMPi(param_name, "coupleint") == 0)
@@ -1127,14 +1127,6 @@ void CheckParams(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, Solver *Solv
 		}
 		else
 		{
-			const int cuda_couple = (Statesptr->cuda == ON &&
-					(Statesptr->acceleration == ON || Statesptr->fv1 == ON));
-			if (!cuda_couple)
-			{
-				printf("\nERROR: coupleint %.3f is implemented for CUDA acceleration and CUDA fv1 only. Aborting...\n\n",
-						Parptr->swmm_coupleint);
-				exit(1);
-			}
 			printf("SWMM coupling interval: %.3f s\n", Parptr->swmm_coupleint);
 		}
 	}

@@ -8,6 +8,7 @@ out/
 *.ilk
 *.exp
 *.lib
+!src/windep/netCDF4-64/lib/netcdf.lib
 *.dll
 *.exe
 *.suo

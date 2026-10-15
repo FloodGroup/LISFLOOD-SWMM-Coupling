@@ -1,147 +1,148 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="670" viewBox="0 0 1200 670" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
   <defs>
     <marker id="aB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3F6F9A"/></marker>
     <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3F7F6E"/></marker>
     <marker id="aO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#B4643A"/></marker>
   </defs>
 
-  <rect width="1200" height="670" fill="#ffffff"/>
+  <rect width="1200" height="690" fill="#ffffff"/>
 
   <!-- ===== Panel: LISFLOOD-FP ===== -->
-  <rect x="20.5" y="20.5" width="300" height="628" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+  <rect x="20.5" y="20.5" width="300" height="648" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
   <path d="M30.5,20.5 H310.5 A10,10 0 0 1 320.5,30.5 V96 H20.5 V30.5 A10,10 0 0 1 30.5,20.5 Z" fill="#3F6F9A"/>
   <text x="40" y="54" font-size="20" font-weight="700" fill="#ffffff">LISFLOOD-FP 8.1</text>
-  <text x="40" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.85">2-D surface &#183; host + GPU</text>
+  <text x="40" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.9">2-D surface &#183; CPU or GPU (CUDA)</text>
 
-  <g font-size="14.5" fill="#555555">
-    <rect x="36" y="114" width="268" height="118" rx="8" fill="#EDF2F7"/>
-    <text x="52" y="144" font-size="16.5" font-weight="700" fill="#222222">Shallow-water solver</text>
-    <text x="52" y="168">ACC (local inertia) or</text>
-    <text x="52" y="188">FV1 (Godunov), CUDA kernels</text>
-    <rect x="52" y="200" width="176" height="22" rx="11" fill="#ffffff" stroke="#BFD0E0"/>
-    <text x="64" y="216" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2C5577">cuda/acc &#183; cuda/fv1</text>
+  <g font-size="15" fill="#4A4A4A">
+    <rect x="36" y="112" width="268" height="126" rx="8" fill="#EEF3F8"/>
+    <text x="52" y="142" font-size="17" font-weight="700" fill="#222222">Shallow-water solver</text>
+    <text x="52" y="166">ACC (local inertia) or FV1</text>
+    <text x="52" y="186">(Godunov), same case on both</text>
 
-    <rect x="36" y="246" width="268" height="118" rx="8" fill="#EDF2F7"/>
-    <text x="52" y="276" font-size="16.5" font-weight="700" fill="#222222">Node &#8596; cell mapping</text>
-    <text x="52" y="300">SWMM node (x, y) &#8594; DEM cell;</text>
-    <text x="52" y="320">rim elevation checked vs DEM</text>
-    <rect x="52" y="332" width="112" height="22" rx="11" fill="#ffffff" stroke="#BFD0E0"/>
-    <text x="64" y="348" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2C5577">cuda_dem.cu</text>
+    <rect x="36" y="248" width="268" height="126" rx="8" fill="#EEF3F8"/>
+    <text x="52" y="278" font-size="17" font-weight="700" fill="#222222">Node &#8596; cell mapping</text>
+    <text x="52" y="302">SWMM node (x, y) &#8594; DEM cell;</text>
+    <text x="52" y="322">rim elevation checked vs DEM</text>
 
-    <rect x="36" y="378" width="268" height="118" rx="8" fill="#EDF2F7"/>
-    <text x="52" y="408" font-size="16.5" font-weight="700" fill="#222222">Point sources</text>
-    <text x="52" y="432">exchange Q enters a cell as</text>
-    <text x="52" y="452">the flux q = Q / &#916;y</text>
-    <rect x="52" y="464" width="150" height="22" rx="11" fill="#ffffff" stroke="#BFD0E0"/>
-    <text x="64" y="480" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2C5577">cuda_boundary.cu</text>
+    <rect x="36" y="384" width="268" height="126" rx="8" fill="#EEF3F8"/>
+    <text x="52" y="414" font-size="17" font-weight="700" fill="#222222">Point sources</text>
+    <text x="52" y="438">exchange Q enters a cell as</text>
+    <text x="52" y="458">the flux q = Q / &#916;y</text>
 
-    <rect x="36" y="510" width="268" height="118" rx="8" fill="#EDF2F7"/>
-    <text x="52" y="540" font-size="16.5" font-weight="700" fill="#222222">Main time loop</text>
-    <text x="52" y="564">CFL step, rain, flux, depth;</text>
-    <text x="52" y="584">calls the coupler every step</text>
-    <rect x="52" y="596" width="168" height="22" rx="11" fill="#ffffff" stroke="#BFD0E0"/>
-    <text x="64" y="612" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2C5577">cuda_*_simulate.cu</text>
+    <rect x="36" y="520" width="268" height="126" rx="8" fill="#EEF3F8"/>
+    <text x="52" y="550" font-size="17" font-weight="700" fill="#222222">Main time loop</text>
+    <text x="52" y="574">CFL step, rain, flux, depth;</text>
+    <text x="52" y="594">calls the coupler every step</text>
+  </g>
+  <g font-size="12.5" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A8A8A">
+    <text x="52" y="212"><tspan font-weight="700" fill="#5F7F9C">CPU</tspan> iterateq.cpp &#183; swe/fv1.cpp</text>
+    <text x="52" y="229"><tspan font-weight="700" fill="#5F7F9C">GPU</tspan> cuda/acc &#183; cuda/fv1</text>
+    <text x="52" y="348"><tspan font-weight="700" fill="#5F7F9C">CPU</tspan> iterateq.cpp &#183; swe/fv1.cpp</text>
+    <text x="52" y="365"><tspan font-weight="700" fill="#5F7F9C">GPU</tspan> cuda_dem.cu</text>
+    <text x="52" y="484"><tspan font-weight="700" fill="#5F7F9C">CPU</tspan> cpu_coupling.cpp</text>
+    <text x="52" y="501"><tspan font-weight="700" fill="#5F7F9C">GPU</tspan> cuda_boundary.cu</text>
+    <text x="52" y="620"><tspan font-weight="700" fill="#5F7F9C">CPU</tspan> IterateQ &#183; fv1::solve</text>
+    <text x="52" y="637"><tspan font-weight="700" fill="#5F7F9C">GPU</tspan> cuda_*_simulate.cu</text>
   </g>
 
   <!-- ===== Panel: Coupling layer ===== -->
-  <rect x="450.5" y="20.5" width="300" height="628" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+  <rect x="450.5" y="20.5" width="300" height="648" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
   <path d="M460.5,20.5 H740.5 A10,10 0 0 1 750.5,30.5 V96 H450.5 V30.5 A10,10 0 0 1 460.5,20.5 Z" fill="#B4643A"/>
   <text x="470" y="54" font-size="20" font-weight="700" fill="#ffffff">Coupling layer</text>
-  <text x="470" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.85">added in this repository</text>
+  <text x="470" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.9">one exchange law for CPU and GPU</text>
 
-  <g font-size="14.5" fill="#555555">
-    <rect x="466" y="114" width="268" height="118" rx="8" fill="#F7EEE7"/>
-    <text x="482" y="144" font-size="16.5" font-weight="700" fill="#222222">Exchange clock</text>
-    <text x="482" y="168">every 2-D step or every T s;</text>
-    <text x="482" y="188">dt clipped to land on T</text>
-    <rect x="482" y="200" width="128" height="22" rx="11" fill="#ffffff" stroke="#E2C3AE"/>
-    <text x="494" y="216" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A4521">swmm_couple.h</text>
+  <g font-size="15" fill="#4A4A4A">
+    <rect x="466" y="112" width="268" height="126" rx="8" fill="#F7EFE9"/>
+    <text x="482" y="142" font-size="17" font-weight="700" fill="#222222">Exchange clock</text>
+    <text x="482" y="166">every 2-D step or every T s;</text>
+    <text x="482" y="186">dt clipped to land on T</text>
 
-    <rect x="466" y="246" width="268" height="118" rx="8" fill="#F7EEE7"/>
-    <text x="482" y="276" font-size="16.5" font-weight="700" fill="#222222">Sparse depth gather</text>
-    <text x="482" y="300">only coupled-cell depths</text>
-    <text x="482" y="320">move GPU &#8594; host</text>
-    <rect x="482" y="332" width="214" height="22" rx="11" fill="#ffffff" stroke="#E2C3AE"/>
-    <text x="494" y="348" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A4521">cuda_coupling_gather.cuh</text>
+    <rect x="466" y="248" width="268" height="126" rx="8" fill="#F7EFE9"/>
+    <text x="482" y="278" font-size="17" font-weight="700" fill="#222222">Manhole exchange</text>
+    <text x="482" y="302">orifice / weir discharge,</text>
+    <text x="482" y="322">capped by available water</text>
 
-    <rect x="466" y="378" width="268" height="118" rx="8" fill="#F7EEE7"/>
-    <text x="482" y="408" font-size="16.5" font-weight="700" fill="#222222">Manhole exchange</text>
-    <text x="482" y="432">orifice / weir discharge,</text>
-    <text x="482" y="452">capped by available water</text>
-    <rect x="482" y="464" width="158" height="22" rx="11" fill="#ffffff" stroke="#E2C3AE"/>
-    <text x="494" y="480" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A4521">cal_flow_exchange</text>
+    <rect x="466" y="384" width="268" height="126" rx="8" fill="#F7EFE9"/>
+    <text x="482" y="414" font-size="17" font-weight="700" fill="#222222">Returned volumes</text>
+    <text x="482" y="438">outfall and flooding &#916;V</text>
+    <text x="482" y="458">become 2-D point sources</text>
 
-    <rect x="466" y="510" width="268" height="118" rx="8" fill="#F7EEE7"/>
-    <text x="482" y="540" font-size="16.5" font-weight="700" fill="#222222">Receiving-cell volumes</text>
-    <text x="482" y="564">finite-volume COUPLED</text>
-    <text x="482" y="584">outfalls, integrated &#916;V</text>
-    <rect x="482" y="596" width="166" height="22" rx="11" fill="#ffffff" stroke="#E2C3AE"/>
-    <text x="494" y="612" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A4521">coupled_boundary.c</text>
+    <rect x="466" y="520" width="268" height="126" rx="8" fill="#F7EFE9"/>
+    <text x="482" y="550" font-size="17" font-weight="700" fill="#222222">Receiving-cell volumes</text>
+    <text x="482" y="574">finite-volume COUPLED</text>
+    <text x="482" y="594">outfalls, integrated &#916;V</text>
+  </g>
+  <g font-size="12.5" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A8A8A">
+    <text x="482" y="221">swmm_couple.h <tspan font-family="Arial, Helvetica, sans-serif" font-style="italic">(shared)</tspan></text>
+    <text x="482" y="348"><tspan font-weight="700" fill="#A0705A">CPU</tspan> cal_exchange_flow</text>
+    <text x="482" y="365"><tspan font-weight="700" fill="#A0705A">GPU</tspan> cal_flow_exchange</text>
+    <text x="482" y="484"><tspan font-weight="700" fill="#A0705A">CPU</tspan> cpu_coupling.cpp</text>
+    <text x="482" y="501"><tspan font-weight="700" fill="#A0705A">GPU</tspan> cuda_dem.cu</text>
+    <text x="482" y="629">coupled_boundary.c <tspan font-family="Arial, Helvetica, sans-serif" font-style="italic">(shared)</tspan></text>
   </g>
 
   <!-- ===== Panel: SWMM ===== -->
-  <rect x="880.5" y="20.5" width="300" height="628" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+  <rect x="880.5" y="20.5" width="300" height="648" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
   <path d="M890.5,20.5 H1170.5 A10,10 0 0 1 1180.5,30.5 V96 H880.5 V30.5 A10,10 0 0 1 890.5,20.5 Z" fill="#3F7F6E"/>
   <text x="900" y="54" font-size="20" font-weight="700" fill="#ffffff">EPA SWMM 5.1.015</text>
-  <text x="900" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.85">1-D sewer &#183; host</text>
+  <text x="900" y="80" font-size="14.5" fill="#ffffff" fill-opacity="0.9">1-D sewer &#183; host CPU</text>
 
-  <g font-size="14.5" fill="#555555">
-    <rect x="896" y="114" width="268" height="118" rx="8" fill="#EBF3EF"/>
-    <text x="912" y="144" font-size="16.5" font-weight="700" fill="#222222">Coupling API</text>
-    <text x="912" y="168">advance by exactly T seconds;</text>
-    <text x="912" y="188">set cells, read volumes</text>
-    <rect x="912" y="200" width="82" height="22" rx="11" fill="#ffffff" stroke="#B9D3C8"/>
-    <text x="924" y="216" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">swmm5.c</text>
+  <g font-size="15" fill="#4A4A4A">
+    <rect x="896" y="112" width="268" height="126" rx="8" fill="#ECF4F0"/>
+    <text x="912" y="142" font-size="17" font-weight="700" fill="#222222">Coupling API</text>
+    <text x="912" y="166">advance by exactly T seconds;</text>
+    <text x="912" y="186">set cells, read volumes</text>
 
-    <rect x="896" y="246" width="268" height="118" rx="8" fill="#EBF3EF"/>
-    <text x="912" y="276" font-size="16.5" font-weight="700" fill="#222222">Dynamic-wave routing</text>
-    <text x="912" y="300">conduit momentum unchanged,</text>
-    <text x="912" y="320">native SWMM sub-steps</text>
-    <rect x="912" y="332" width="182" height="22" rx="11" fill="#ffffff" stroke="#B9D3C8"/>
-    <text x="924" y="348" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">dynwave.c &#183; dwflow.c</text>
+    <rect x="896" y="248" width="268" height="126" rx="8" fill="#ECF4F0"/>
+    <text x="912" y="278" font-size="17" font-weight="700" fill="#222222">Dynamic-wave routing</text>
+    <text x="912" y="302">conduit momentum unchanged,</text>
+    <text x="912" y="322">native SWMM sub-steps</text>
 
-    <rect x="896" y="378" width="268" height="118" rx="8" fill="#EBF3EF"/>
-    <text x="912" y="408" font-size="16.5" font-weight="700" fill="#222222">Continuity hooks</text>
-    <text x="912" y="432">backward-Euler node volumes</text>
-    <text x="912" y="452">around COUPLED outfalls</text>
-    <rect x="912" y="464" width="166" height="22" rx="11" fill="#ffffff" stroke="#B9D3C8"/>
-    <text x="924" y="480" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">routing.c &#183; node.c</text>
+    <rect x="896" y="384" width="268" height="126" rx="8" fill="#ECF4F0"/>
+    <text x="912" y="414" font-size="17" font-weight="700" fill="#222222">Continuity hooks</text>
+    <text x="912" y="438">backward-Euler node volumes</text>
+    <text x="912" y="458">around COUPLED outfalls</text>
 
-    <rect x="896" y="510" width="268" height="118" rx="8" fill="#EBF3EF"/>
-    <text x="912" y="540" font-size="16.5" font-weight="700" fill="#222222">COUPLED outfall type</text>
-    <text x="912" y="564">new [OUTFALLS] type; stage</text>
-    <text x="912" y="584">comes from the 2-D cell</text>
-    <rect x="912" y="596" width="242" height="22" rx="11" fill="#ffffff" stroke="#B9D3C8"/>
-    <text x="924" y="612" font-size="13" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">text.h &#183; enums.h &#183; keywords.c</text>
+    <rect x="896" y="520" width="268" height="126" rx="8" fill="#ECF4F0"/>
+    <text x="912" y="550" font-size="17" font-weight="700" fill="#222222">COUPLED outfall type</text>
+    <text x="912" y="574">new [OUTFALLS] type; stage</text>
+    <text x="912" y="594">comes from the 2-D cell</text>
+  </g>
+  <g font-size="12.5" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#8A8A8A">
+    <text x="912" y="221">swmm5.c</text>
+    <text x="912" y="357">dynwave.c &#183; dwflow.c</text>
+    <text x="912" y="493">routing.c &#183; node.c</text>
+    <text x="912" y="629">text.h &#183; enums.h &#183; keywords.c</text>
   </g>
 
   <!-- ===== Data flows: surface <-> coupler ===== -->
   <g stroke-width="2.5" fill="none">
-    <path d="M324,305 H444" stroke="#3F6F9A" marker-end="url(#aB)"/>
-    <path d="M446,437 H326" stroke="#B4643A" marker-end="url(#aO)"/>
+    <path d="M324,311 H444" stroke="#3F6F9A" marker-end="url(#aB)"/>
+    <path d="M446,447 H326" stroke="#B4643A" marker-end="url(#aO)"/>
   </g>
   <g text-anchor="middle">
-    <text x="385" y="293" font-size="15" font-weight="700" fill="#2C5577">depth h</text>
-    <text x="385" y="325" font-size="13" fill="#666666">coupled cells</text>
-    <text x="385" y="425" font-size="15" font-weight="700" fill="#8A4521">source q</text>
-    <text x="385" y="457" font-size="13" fill="#666666">m&#178;/s per cell</text>
+    <text x="385" y="299" font-size="15" font-weight="700" fill="#2C5577">depth h</text>
+    <text x="385" y="331" font-size="13" fill="#666666">coupled cells</text>
+    <text x="385" y="347" font-size="12" fill="#888888">sparse gather on GPU</text>
+    <text x="385" y="435" font-size="15" font-weight="700" fill="#8A4521">source q</text>
+    <text x="385" y="467" font-size="13" fill="#666666">m&#178;/s per cell</text>
   </g>
 
   <!-- ===== Data flows: coupler <-> SWMM ===== -->
   <g stroke-width="2.5" fill="none">
-    <path d="M754,173 H874" stroke="#B4643A" marker-end="url(#aO)"/>
-    <path d="M754,305 H874" stroke="#B4643A" marker-end="url(#aO)"/>
-    <path d="M876,437 H756" stroke="#3F7F6E" marker-end="url(#aG)"/>
-    <path d="M876,569 H756" stroke="#3F7F6E" marker-end="url(#aG)"/>
+    <path d="M754,175 H874" stroke="#B4643A" marker-end="url(#aO)"/>
+    <path d="M754,311 H874" stroke="#B4643A" marker-end="url(#aO)"/>
+    <path d="M876,447 H756" stroke="#3F7F6E" marker-end="url(#aG)"/>
+    <path d="M876,583 H756" stroke="#3F7F6E" marker-end="url(#aG)"/>
   </g>
   <g text-anchor="middle">
-    <text x="815" y="161" font-size="15" font-weight="700" fill="#8A4521">Node_Inflow</text>
-    <text x="815" y="193" font-size="13" fill="#666666">interval mean</text>
-    <text x="815" y="293" font-size="15" font-weight="700" fill="#8A4521">z<tspan baseline-shift="sub" font-size="11">bed</tspan>, h, A</text>
-    <text x="815" y="325" font-size="13" fill="#666666">receiving cells</text>
-    <text x="815" y="425" font-size="15" font-weight="700" fill="#2A5E51">&#916;V exchange</text>
-    <text x="815" y="457" font-size="13" fill="#666666">outfalls, flooding</text>
-    <text x="815" y="557" font-size="15" font-weight="700" fill="#2A5E51">stored volume</text>
-    <text x="815" y="589" font-size="13" fill="#666666">surcharge cap</text>
+    <text x="815" y="163" font-size="15" font-weight="700" fill="#8A4521">Node_Inflow</text>
+    <text x="815" y="195" font-size="13" fill="#666666">interval mean</text>
+    <text x="815" y="299" font-size="15" font-weight="700" fill="#8A4521">z<tspan baseline-shift="sub" font-size="11">bed</tspan>, h, A</text>
+    <text x="815" y="331" font-size="13" fill="#666666">receiving cells</text>
+    <text x="815" y="435" font-size="15" font-weight="700" fill="#2A5E51">&#916;V exchange</text>
+    <text x="815" y="467" font-size="13" fill="#666666">outfalls, flooding</text>
+    <text x="815" y="571" font-size="15" font-weight="700" fill="#2A5E51">stored volume</text>
+    <text x="815" y="603" font-size="13" fill="#666666">surcharge cap</text>
   </g>
 </svg>

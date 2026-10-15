@@ -1,4 +1,4 @@
-/* V9 conservative finite-volume COUPLED receiving cells.
+/* Conservative finite-volume COUPLED receiving cells.
  * Interior pipe endpoint areas represent half lengths. At an outfall the
  * boundary is a face, not a storage node: the whole terminal pipe storage
  * belongs to its interior endpoint. The receiving cell is a finite volume.
@@ -147,7 +147,7 @@ int coupled_open(void)
     if (RouteModel != DW || IgnoreRouting || NumEvents > 0 ||
         (Nobjects[POLLUT] > 0 && !IgnoreQuality))
     {
-        fprintf(stderr, "V9 COUPLED requires continuous DYNWAVE and hydraulic-only routing (no routing EVENTS).\n");
+        fprintf(stderr, "COUPLED requires continuous DYNWAVE and hydraulic-only routing (no routing EVENTS).\n");
         ErrorCode = ERR_SYSTEM; return ErrorCode;
     }
     CN = (CNode*)calloc(Nobjects[NODE], sizeof(CNode));
@@ -440,7 +440,7 @@ int coupled_commit(double dt)
         actual = cell_volume(g,CC[g].head);
         if (!isfinite(actual) || !isfinite(target) || fabs(actual-target) > tolerance + 1.e-8*MAX(1.0,fabs(target)))
         {
-            fprintf(stderr,"V9: finite receiving cell %d did not converge (volume residual %.9g m3). Reduce ROUTING_STEP / coupleint.\n",CC[g].id,(actual-target)*0.028316846592);
+            fprintf(stderr,"finite receiving cell %d did not converge (volume residual %.9g m3). Reduce ROUTING_STEP / coupleint.\n",CC[g].id,(actual-target)*0.028316846592);
             ErrorCode = ERR_TIMESTEP; return ErrorCode;
         }
     }
@@ -453,7 +453,7 @@ int coupled_commit(double dt)
             double actual=node_volume(n,Node[n].invertElev+Node[n].newDepth);
             if (!isfinite(actual) || !isfinite(target) || fabs(actual-target)>1.e-6+1.e-8*MAX(1.0,fabs(target)))
             {
-                fprintf(stderr,"V9: node %s volume equation failed (%.9g m3); reduce ROUTING_STEP.\n",Node[n].ID,(actual-target)*0.028316846592);
+                fprintf(stderr,"node %s volume equation failed (%.9g m3); reduce ROUTING_STEP.\n",Node[n].ID,(actual-target)*0.028316846592);
                 ErrorCode=ERR_TIMESTEP; return ErrorCode;
             }
         }

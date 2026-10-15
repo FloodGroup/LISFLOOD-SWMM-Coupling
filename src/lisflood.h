@@ -4,7 +4,7 @@
 LISFLOOD-FP flood inundation model
 #####################################################################################
 
-� copyright Bristol University Hydrology Research Group 2008
+(c) copyright Bristol University Hydrology Research Group 2008
 
 webpage -	http://www.ggy.bris.ac.uk/research/hydrology/models/lisflood
 contact -	Professor Paul Bates, email: paul.bates@Bristol.ac.uk,
@@ -724,7 +724,7 @@ struct Pars{
     int drain_nodata; // remove water from DEM NODATA cells
     int limit_slopes; /**< DG2 slope limiter enabled when limit_slopes = ON */
 
-	NUMERIC_TYPE hsfdt; //swmm热启动保存间隔
+	NUMERIC_TYPE hsfdt;
 	int swmm_couple_every_step; // 1: exchange every 2D step; 0: fixed coupleint
 	NUMERIC_TYPE swmm_coupleint; // fixed SWMM exchange interval (seconds)
 	// adaptation. to merge?
@@ -917,7 +917,8 @@ FILE* fopen_or_die(const char * filename, const char* mode, const char* message 
 
 // LISFLOOD Solution prototypes - iterateq.cpp
 void IterateQ(Fnames *, Files *, States *, Pars *, Solver*, BoundCs *, Stage *, ChannelSegmentType *, Arrays *, SGCprams *, vector<int> *, int *, vector<ChannelSegmentType> *, const int verbose);
-void UpdateH(States *, Pars *, Solver *, BoundCs *, ChannelSegmentType *, Arrays *);
+void UpdateH(States *, Pars *, Solver *, BoundCs *, ChannelSegmentType *, Arrays *,
+	int point_source_end, bool reset_point_stats);
 
 // Floodplain prototypes - fp_flow.cpp
 void FloodplainQ(States *, Pars *, Solver *, Arrays *, SGCprams *);

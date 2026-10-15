@@ -31,6 +31,8 @@ namespace fv1
         Solver *Solverptr,
         BoundCs *BCptr,
         Arrays *Arrptr,
+        const int source_start,
+        const int source_end,
         const int coupling_start_index
     );
 

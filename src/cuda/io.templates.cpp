@@ -122,7 +122,7 @@ void lis::Snapshot::write
 
 	int write_failed = ferror(file);
 	if (fclose(file) != 0) write_failed = 1;
-	if (write_failed) throw std::runtime_error(std::string("V11 snapshot write failed: ")+filename);
+	if (write_failed) throw std::runtime_error(std::string("snapshot write failed: ")+filename);
 
 	// check if we need to zip the file up
 	if (call_gzip == ON)
@@ -158,7 +158,7 @@ void lis::Snapshot::write_max
 
 	int write_failed = ferror(file);
 	if (fclose(file) != 0) write_failed = 1;
-	if (write_failed) throw std::runtime_error(std::string("V11 maximum write failed: ")+filename);
+	if (write_failed) throw std::runtime_error(std::string("maximum write failed: ")+filename);
 
 }
 

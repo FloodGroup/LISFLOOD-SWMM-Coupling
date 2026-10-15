@@ -227,7 +227,7 @@ void lis::cuda::Topography::flood_init
 	Geometry& geometry
 )
 {
-	//固定值----------------------------------------------------------------
+
 	verlink->node_Vindex = new int[verlink->count_index]();                      
 	verlink->dem_Vindex = new int[verlink->count_index]();                       
 	verlink->dem_count = new int[verlink->count_index]();
@@ -249,7 +249,7 @@ void lis::cuda::Topography::flood_init
 	verlink->dem_xi = new int[verlink->count_index]();                           
 	verlink->dem_yi = new int[verlink->count_index]();                           
 	//----------------------------------------------------------------------     
-	//每轮计算改变值---------------------------------------------------------    
+
 	verlink->flow_1D_node = new double[verlink->count_index]();                  
 	verlink->flow_2D_node = new double[verlink->count_index]();                  
 	verlink->flow_2D_dem = new double[verlink->count_index](); 
@@ -485,7 +485,7 @@ void lis::cuda::Topography::cal_flow_exchange
 			verlink->flow_2D_node[i] = 0.0;
 		}
 	}
-	//统计各个网格回流数
+
 //#pragma omp parallel for private(k)
 	for (size_t k = 0; k < verlink->count_index; k++)
 	{
@@ -647,7 +647,7 @@ void lis::cuda::Topography::flood_init_fv1
 	Geometry& geometry
 )
 {
-	//固定值----------------------------------------------------------------
+
 	verlink->node_Vindex = new int[verlink->count_index]();
 	verlink->dem_Vindex = new int[verlink->count_index]();
 	verlink->dem_count = new int[verlink->count_index]();
@@ -669,7 +669,7 @@ void lis::cuda::Topography::flood_init_fv1
 	verlink->dem_xi = new int[verlink->count_index]();
 	verlink->dem_yi = new int[verlink->count_index]();
 	//----------------------------------------------------------------------     
-	//每轮计算改变值---------------------------------------------------------    
+
 	verlink->flow_1D_node = new double[verlink->count_index]();
 	verlink->flow_2D_node = new double[verlink->count_index]();
 	verlink->flow_2D_dem = new double[verlink->count_index]();
@@ -773,7 +773,7 @@ void lis::cuda::Topography::map_internal_outfalls
 	}
 
 	fprintf(flood_error, "====================================================================\n");
-	fprintf(flood_error, "V2 SWMM OUTFALL TO 2D MAPPING START:\n");
+	fprintf(flood_error, "SWMM OUTFALL TO 2D MAPPING START:\n");
 	fprintf(flood_error, "====================================================================\n");
 
 	if (total_outfalls == 0)
@@ -857,7 +857,7 @@ void lis::cuda::Topography::map_internal_outfalls
 			"Mapped %d of %d outfalls to %d unique valid 2D cells; "
 			"unmapped outfalls remain external sinks.\n",
 			verlink->outfall_count, total_outfalls, verlink->outfall_dem_count);
-	// V8: the INP outfall type is the selector. All standard SWMM outfall types
+	// The INP outfall type is the selector. All standard SWMM outfall types
 	// retain their ordinary boundary conditions. Every COUPLED outfall
 	// must map to a valid 2D cell so that its stage can be updated at runtime.
 	int selected = 0;
@@ -867,7 +867,7 @@ void lis::cuda::Topography::map_internal_outfalls
 			Outfall[Node[node_index].subIndex].type != COUPLED_OUTFALL) continue;
 		if (RouteModel != DW)
 		{
-			fprintf(stderr, "V8: COUPLED tailwater requires SWMM DYNWAVE routing\n");
+			fprintf(stderr, "COUPLED tailwater requires SWMM DYNWAVE routing\n");
 			exit(EXIT_FAILURE);
 		}
 		int matched = -1;
@@ -877,22 +877,22 @@ void lis::cuda::Topography::map_internal_outfalls
 		}
 		if (matched < 0)
 		{
-			fprintf(stderr, "V8: COUPLED outfall %s has no valid LISFLOOD DEM cell\n",
+			fprintf(stderr, "COUPLED outfall %s has no valid LISFLOOD DEM cell\n",
 				Node[node_index].ID);
 			exit(EXIT_FAILURE);
 		}
 		verlink->outfall_dynamic_stage[matched] = 1;
 		++selected;
-		fprintf(flood_error, "V8 COUPLED tailwater: %s -> DEM index %d; "
+		fprintf(flood_error, "COUPLED tailwater: %s -> DEM index %d; "
 			"2D bed %.6f m; SWMM invert %.6f m\n",
 			Node[node_index].ID, verlink->outfall_dem_Vindex[matched],
 			(double)DEM[verlink->outfall_dem_Vindex[matched]],
 			Node[node_index].invertElev * 0.3048);
 	}
 	verlink->dynamic_outfall_count = selected;
-	fprintf(flood_error, "V8 COUPLED tailwater: %d outfalls\n", selected);
+	fprintf(flood_error, "COUPLED tailwater: %d outfalls\n", selected);
 	fprintf(flood_error, "====================================================================\n");
-	fprintf(flood_error, "V2 SWMM OUTFALL TO 2D MAPPING END:\n");
+	fprintf(flood_error, "SWMM OUTFALL TO 2D MAPPING END:\n");
 	fprintf(flood_error, "====================================================================\n");
 }
 
@@ -910,12 +910,12 @@ void lis::cuda::Topography::update_outfall_stages
 		int cell = -1;
 		for (int k = 0; k < verlink->outfall_dem_count; ++k)
 			if (verlink->outfall_dem_Vindex_uni[k] == verlink->outfall_dem_Vindex[i]) { cell = k; break; }
-		if (cell < 0) { fprintf(stderr, "V8: missing mapped tailwater cell\n"); exit(EXIT_FAILURE); }
+		if (cell < 0) { fprintf(stderr, "missing mapped tailwater cell\n"); exit(EXIT_FAILURE); }
 		const double bed = DEM[verlink->outfall_dem_Vindex[i]];
 		const double depth = outfall_depths[cell];
 		if (!isfinite(bed) || !isfinite(depth) || depth < -1.0e-5)
 		{
-			fprintf(stderr, "V8: invalid river stage at outfall %s (bed %.9g, depth %.9g)\n",
+			fprintf(stderr, "invalid river stage at outfall %s (bed %.9g, depth %.9g)\n",
 				Node[verlink->outfall_node_Vindex[i]].ID, bed, depth);
 			exit(EXIT_FAILURE);
 		}
@@ -923,7 +923,7 @@ void lis::cuda::Topography::update_outfall_stages
 			verlink->outfall_dem_Vindex[i], bed, depth > 0.0 ? depth : 0.0,
 			cell_area) != 0)
 		{
-			fprintf(stderr, "V8: failed to set SWMM tailwater at %s\n",
+			fprintf(stderr, "failed to set SWMM tailwater at %s\n",
 				Node[verlink->outfall_node_Vindex[i]].ID);
 			exit(EXIT_FAILURE);
 		}
@@ -946,7 +946,7 @@ void lis::cuda::Topography::collect_surface_flood_values(Vconnect* verlink,
 		if (v <= 0.0) continue;
 		if (slots[n] < 0)
 		{
-			fprintf(stderr,"V9: flooded node %s has no mapped 2D receiving cell; add a valid floodconfig mapping.\n",Node[n].ID);
+			fprintf(stderr,"flooded node %s has no mapped 2D receiving cell; add a valid floodconfig mapping.\n",Node[n].ID);
 			exit(EXIT_FAILURE);
 		}
 		values[source_offset+slots[n]]+=(NUMERIC_TYPE)(v/(exchange_seconds*cell_width));
@@ -1001,7 +1001,7 @@ void lis::cuda::Topography::collect_outfall_source_values
 				8.0 * FLT_EPSILON : 8.0 * DBL_EPSILON) * getmax(1.0, available);
 			if (q < 0.0 && -q * exchange_seconds > available + 1.0e-7 + roundoff)
 			{
-				fprintf(stderr, "V9: reverse outfall flow exceeds 2D cell water volume at DEM index %d; reduce coupleint or check river cell/datum\n",
+				fprintf(stderr, "reverse outfall flow exceeds 2D cell water volume at DEM index %d; reduce coupleint or check river cell/datum\n",
 					verlink->outfall_dem_Vindex_uni[cell]);
 				exit(EXIT_FAILURE);
 			}

@@ -5,7 +5,9 @@ Two small, self-contained cases for checking a build.
 | Case | Solver | What it checks |
 |---|---|---|
 | [`01_surface_only_drycheck`](01_surface_only_drycheck/) | CPU ACC, no SWMM | the executable starts and writes output |
-| [`02_coupled_synthetic`](02_coupled_synthetic/) | CUDA ACC + SWMM | coupled input wiring: one junction inlet, one `COUPLED` outfall |
+| [`02_coupled_synthetic`](02_coupled_synthetic/) | CPU ACC + SWMM; switch to FV1 or add `cuda` for the GPU | coupled input wiring: one junction inlet, one `COUPLED` outfall |
+
+Both cases run without a GPU.
 
 ## Running a case
 

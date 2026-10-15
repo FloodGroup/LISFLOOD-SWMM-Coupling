@@ -19,7 +19,7 @@ typedef struct vconnect
 	int* node_Vindex; 
 	int* dem_Vindex; 
 	int* dem_count;
-	int* node_dem_slot; // V9 compact cell slot for each mapped inlet 
+	int* node_dem_slot; // compact cell slot for each mapped inlet
 
 	double* node_surfelev; 
 
@@ -46,7 +46,7 @@ typedef struct vconnect
 	int* dem_yi;         
 	int* flow_type;      
 
-	// V2 one-way SWMM outfall-to-2D coupling. Only outfalls whose
+	// Outfalls whose
 	// coordinates fall on a valid LISFLOOD DEM cell are stored here.
 	int outfall_count;
 	int* outfall_node_Vindex;

@@ -1,19 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1090" viewBox="0 0 1200 1090" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4D4D4D"/></marker>
     <marker id="aG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9A9A9A"/></marker>
     <marker id="aT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3F7F6E"/></marker>
   </defs>
 
-  <rect width="1200" height="1090" fill="#ffffff"/>
+  <rect width="1200" height="1200" fill="#ffffff"/>
 
   <!-- lanes -->
-  <rect x="20" y="20" width="384" height="1020" rx="10" fill="#F3F6F9"/>
-  <rect x="414" y="20" width="380" height="1020" rx="10" fill="#FAF5F1"/>
-  <rect x="804" y="20" width="376" height="1020" rx="10" fill="#F2F7F4"/>
+  <rect x="20" y="20" width="384" height="1102" rx="10" fill="#F3F6F9"/>
+  <rect x="414" y="20" width="380" height="1102" rx="10" fill="#FAF5F1"/>
+  <rect x="804" y="20" width="376" height="1102" rx="10" fill="#F2F7F4"/>
   <g font-size="17" font-weight="700">
     <rect x="64" y="38" width="320" height="38" rx="19" fill="#3F6F9A"/>
-    <text x="224" y="63" text-anchor="middle" fill="#fff">2-D surface &#183; LISFLOOD-FP</text>
+    <text x="224" y="63" text-anchor="middle" fill="#fff">2-D surface &#183; CPU or GPU</text>
     <rect x="434" y="38" width="340" height="38" rx="19" fill="#B4643A"/>
     <text x="604" y="63" text-anchor="middle" fill="#fff">Coupler &#183; host</text>
     <rect x="822" y="38" width="340" height="38" rx="19" fill="#3F7F6E"/>
@@ -22,24 +22,24 @@
 
   <!-- connectors -->
   <g stroke="#4D4D4D" stroke-width="2" fill="none" marker-end="url(#a)">
-    <path d="M224,176 V241 H426"/>
-    <path d="M604,276 V292"/>
-    <path d="M604,362 V429 H392"/>
-    <path d="M224,464 V523 H426"/>
-    <path d="M604,558 V574"/>
-    <path d="M604,666 V706"/>
-    <path d="M774,741 H814"/>
-    <path d="M992,904 V985 H782"/>
-    <path d="M434,985 H392"/>
+    <path d="M224,176 V231 H426"/>
+    <path d="M604,266 V274"/>
+    <path d="M604,352 V411 H392"/>
+    <path d="M224,446 V505 H426"/>
+    <path d="M604,540 V549"/>
+    <path d="M604,647 V668"/>
+    <path d="M774,711 H992 V758"/>
+    <path d="M992,1016 V1067 H782"/>
+    <path d="M434,1067 H392"/>
   </g>
   <g stroke="#9A9A9A" stroke-width="2" fill="none" stroke-dasharray="6 5">
-    <path d="M464,620 H44"/>
-    <path d="M64,985 H44 V141 H56" marker-end="url(#aG)"/>
+    <path d="M464,602 H44"/>
+    <path d="M64,1067 H44 V141 H56" marker-end="url(#aG)"/>
   </g>
   <g font-size="14.5" font-weight="700">
-    <text x="616" y="694" fill="#2A5E51">yes</text>
-    <text x="250" y="610" fill="#777777">no &#8212; keep accumulating</text>
-    <text x="37" y="560" fill="#777777" text-anchor="middle" transform="rotate(-90 37 560)">next 2-D step</text>
+    <text x="616" y="664" fill="#2A5E51">yes</text>
+    <text x="250" y="592" fill="#777777">no &#8212; keep accumulating</text>
+    <text x="37" y="380" fill="#777777" text-anchor="middle" transform="rotate(-90 37 380)">next 2-D step</text>
   </g>
 
   <!-- step boxes -->
@@ -51,72 +51,75 @@
     <text x="116" y="158">CFL, rainfall, clip to next exchange</text>
 
     <!-- 2 -->
-    <rect x="434.5" y="206.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
-    <circle cx="462" cy="241" r="14" fill="#B4643A"/><text x="462" y="246.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">2</text>
-    <text x="486" y="235" font-size="16.5" font-weight="700" fill="#222222">Gather coupled depths</text>
-    <text x="486" y="258">manhole and outfall cells, GPU &#8594; host</text>
+    <rect x="434.5" y="196.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
+    <circle cx="462" cy="231" r="14" fill="#B4643A"/><text x="462" y="236.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">2</text>
+    <text x="486" y="225" font-size="16.5" font-weight="700" fill="#222222">Read coupled depths</text>
+    <text x="486" y="248">after net rain; sparse copy on GPU</text>
 
     <!-- 3 -->
-    <rect x="434.5" y="292.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
-    <circle cx="462" cy="327" r="14" fill="#B4643A"/><text x="462" y="332.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">3</text>
-    <text x="486" y="321" font-size="16.5" font-weight="700" fill="#222222">Manhole discharge Q</text>
-    <text x="486" y="344">orifice / weir law, supply-limited</text>
+    <rect x="434.5" y="282.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
+    <circle cx="462" cy="317" r="14" fill="#B4643A"/><text x="462" y="322.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">3</text>
+    <text x="486" y="311" font-size="16.5" font-weight="700" fill="#222222">Manhole discharge Q</text>
+    <text x="486" y="334">orifice / weir law, supply-limited</text>
 
     <!-- 4 -->
-    <rect x="64.5" y="394.5" width="320" height="70" rx="8" fill="#ffffff" stroke="#BFD0E0"/>
-    <circle cx="92" cy="429" r="14" fill="#3F6F9A"/><text x="92" y="434.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">4</text>
-    <text x="116" y="423" font-size="16.5" font-weight="700" fill="#222222">Advance the 2-D surface</text>
-    <text x="116" y="446">sources q = Q / &#916;y; flux, depth</text>
+    <rect x="64.5" y="376.5" width="320" height="70" rx="8" fill="#ffffff" stroke="#BFD0E0"/>
+    <circle cx="92" cy="411" r="14" fill="#3F6F9A"/><text x="92" y="416.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">4</text>
+    <text x="116" y="405" font-size="16.5" font-weight="700" fill="#222222">Update the 2-D surface</text>
+    <text x="116" y="428">sources q = Q / &#916;y, flux, depth</text>
 
     <!-- 5 -->
-    <rect x="434.5" y="488.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
-    <circle cx="462" cy="523" r="14" fill="#B4643A"/><text x="462" y="528.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">5</text>
-    <text x="486" y="517" font-size="16.5" font-weight="700" fill="#222222">Accumulate inlet volume</text>
-    <text x="486" y="540">V<tspan baseline-shift="sub" font-size="11">i</tspan> += Q<tspan baseline-shift="sub" font-size="11">i</tspan> dt,  elapsed += dt</text>
+    <rect x="434.5" y="470.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
+    <circle cx="462" cy="505" r="14" fill="#B4643A"/><text x="462" y="510.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">5</text>
+    <text x="486" y="499" font-size="16.5" font-weight="700" fill="#222222">Accumulate inlet volume</text>
+    <text x="486" y="522">V<tspan baseline-shift="sub" font-size="11">i</tspan> += Q<tspan baseline-shift="sub" font-size="11">i</tspan> dt,  elapsed += dt</text>
 
     <!-- decision -->
-    <path d="M604,575 L744,620 L604,665 L464,620 Z" fill="#ffffff" stroke="#B4643A" stroke-width="1.5"/>
-    <text x="604" y="617" text-anchor="middle" font-size="16.5" font-weight="700" fill="#222222">Exchange due?</text>
-    <text x="604" y="637" text-anchor="middle" font-size="13.5" fill="#666666">elapsed &#8805; T, or end of run</text>
+    <path d="M604,557 L744,602 L604,647 L464,602 Z" fill="#ffffff" stroke="#B4643A" stroke-width="1.5"/>
+    <text x="604" y="599" text-anchor="middle" font-size="16.5" font-weight="700" fill="#222222">Exchange due?</text>
+    <text x="604" y="619" text-anchor="middle" font-size="13.5" fill="#666666">elapsed &#8805; T, or end of run</text>
 
     <!-- 6 -->
-    <rect x="434.5" y="706.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
-    <circle cx="462" cy="741" r="14" fill="#B4643A"/><text x="462" y="746.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">6</text>
-    <text x="486" y="735" font-size="16.5" font-weight="700" fill="#222222">Hand over to SWMM</text>
-    <text x="486" y="758">Node_Inflow = V / T; receiving cells</text>
+    <rect x="434.5" y="676.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
+    <circle cx="462" cy="711" r="14" fill="#B4643A"/><text x="462" y="716.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">6</text>
+    <text x="486" y="705" font-size="16.5" font-weight="700" fill="#222222">Hand over to SWMM</text>
+    <text x="486" y="728">Node_Inflow = V / T; receiving cells</text>
 
     <!-- 8 -->
-    <rect x="434.5" y="950.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
-    <circle cx="462" cy="985" r="14" fill="#B4643A"/><text x="462" y="990.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">8</text>
-    <text x="486" y="979" font-size="16.5" font-weight="700" fill="#222222">Collect exchanged volumes</text>
-    <text x="486" y="1002">outfall &#916;V and node flooding &#8594; q</text>
+    <rect x="434.5" y="1032.5" width="340" height="70" rx="8" fill="#ffffff" stroke="#E2C3AE"/>
+    <circle cx="462" cy="1067" r="14" fill="#B4643A"/><text x="462" y="1072.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">8</text>
+    <text x="486" y="1061" font-size="16.5" font-weight="700" fill="#222222">Collect exchanged volumes</text>
+    <text x="486" y="1084">outfall &#916;V and node flooding &#8594; q</text>
 
     <!-- 9 -->
-    <rect x="64.5" y="950.5" width="320" height="70" rx="8" fill="#ffffff" stroke="#BFD0E0"/>
-    <circle cx="92" cy="985" r="14" fill="#3F6F9A"/><text x="92" y="990.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">9</text>
-    <text x="116" y="979" font-size="16.5" font-weight="700" fill="#222222">Apply exchange sources</text>
-    <text x="116" y="1002">add to cell depths; t &#8592; t + dt</text>
+    <rect x="64.5" y="1032.5" width="320" height="70" rx="8" fill="#ffffff" stroke="#BFD0E0"/>
+    <circle cx="92" cy="1067" r="14" fill="#3F6F9A"/><text x="92" y="1072.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">9</text>
+    <text x="116" y="1061" font-size="16.5" font-weight="700" fill="#222222">Apply exchange sources</text>
+    <text x="116" y="1084">add to cell depths; t &#8592; t + dt</text>
   </g>
 
   <!-- 7: SWMM coupled advance -->
-  <rect x="822.5" y="654.5" width="340" height="250" rx="8" fill="#ffffff" stroke="#B9D3C8" stroke-width="1.5"/>
-  <circle cx="850" cy="684" r="14" fill="#3F7F6E"/><text x="850" y="689.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">7</text>
-  <text x="874" y="681" font-size="16.5" font-weight="700" fill="#222222">Advance SWMM by T</text>
-  <text x="874" y="702" font-size="13.5" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">swmm_advanceCoupled(T)</text>
+  <rect x="822.5" y="766.5" width="340" height="250" rx="8" fill="#ffffff" stroke="#B9D3C8" stroke-width="1.5"/>
+  <circle cx="850" cy="796" r="14" fill="#3F7F6E"/><text x="850" y="801.5" text-anchor="middle" fill="#fff" font-weight="700" font-size="15">7</text>
+  <text x="874" y="793" font-size="16.5" font-weight="700" fill="#222222">Advance SWMM by T</text>
+  <text x="874" y="814" font-size="13.5" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" fill="#2A5E51">swmm_advanceCoupled(T)</text>
 
   <g font-size="14.5" fill="#333333">
-    <rect x="840" y="716" width="304" height="30" rx="6" fill="#E3EEE9"/>
-    <text x="854" y="736">hold inlet rate constant over T</text>
-    <rect x="840.5" y="754.5" width="304" height="140" rx="6" fill="#F5F9F7" stroke="#B9D3C8" stroke-dasharray="4 3"/>
-    <text x="854" y="776" font-weight="700" fill="#2A5E51">each dynamic-wave sub-step &#948;t</text>
-    <text x="854" y="797">&#8226; limit donor withdrawals</text>
-    <text x="854" y="817">&#8226; node volumes, backward Euler</text>
-    <text x="854" y="837">&#8226; receiving-cell head</text>
-    <text x="854" y="857">&#8226; commit &#916;V<tspan baseline-shift="sub" font-size="11">ex</tspan> += Q &#948;t at outfalls</text>
-    <text x="854" y="884" fill="#777777" font-size="13">repeat until T is reached</text>
+    <rect x="840" y="828" width="304" height="30" rx="6" fill="#E3EEE9"/>
+    <text x="854" y="848">hold inlet rate constant over T</text>
+    <rect x="840.5" y="866.5" width="304" height="140" rx="6" fill="#F5F9F7" stroke="#B9D3C8" stroke-dasharray="4 3"/>
+    <text x="854" y="888" font-weight="700" fill="#2A5E51">each dynamic-wave sub-step &#948;t</text>
+    <text x="854" y="909">&#8226; limit donor withdrawals</text>
+    <text x="854" y="929">&#8226; node volumes, backward Euler</text>
+    <text x="854" y="949">&#8226; receiving-cell head</text>
+    <text x="854" y="969">&#8226; commit &#916;V<tspan baseline-shift="sub" font-size="11">ex</tspan> += Q &#948;t at outfalls</text>
+    <text x="854" y="996" fill="#777777" font-size="13">repeat until T is reached</text>
   </g>
-  <path d="M1128,880 C1150,850 1150,792 1128,766" stroke="#3F7F6E" stroke-width="1.8" fill="none" marker-end="url(#aT)"/>
+  <path d="M1128,992 C1150,962 1150,904 1128,878" stroke="#3F7F6E" stroke-width="1.8" fill="none" marker-end="url(#aT)"/>
 
   <!-- footer -->
-  <text x="600" y="1068" text-anchor="middle" font-size="14" fill="#666666">Shown for the CUDA ACC / FV1 drivers (cuda_acc_simulate.cu, cuda_fv1_simulate.cu). With coupleint step, T equals the current 2-D dt.</text>
+  <g font-size="14" fill="#666666" text-anchor="middle">
+    <text x="600" y="1152">Same cycle in all four drivers: CPU ACC / FV1 (iterateq.cpp, swe/fv1.cpp) and CUDA ACC / FV1 (cuda_acc_simulate.cu, cuda_fv1_simulate.cu).</text>
+    <text x="600" y="1174">In step 4 the CPU applies the inlet sources to the depth before the flux update; CUDA applies them with it. With coupleint step, T = dt.</text>
+  </g>
 </svg>

@@ -3,7 +3,7 @@
 LISFLOOD-FP flood inundation model
 #####################################################################################
 
-� copyright Bristol University Hydrology Research Group 2008
+(c) copyright Bristol University Hydrology Research Group 2008
 
 webpage -	http://www.ggy.bris.ac.uk/research/hydrology/models/lisflood
 contact -	Professor Paul Bates, email: paul.bates@Bristol.ac.uk,
@@ -327,11 +327,11 @@ int main(int argc, char* argv[])
 				"'floodconfig'. Omit both for a standalone LISFLOOD run.\n");
 		return 1;
 	}
-	if (has_swmm_input && (Statesptr->cuda != ON ||
-			(Statesptr->fv1 != ON && Statesptr->acceleration != ON) ||
+	if (has_swmm_input && ((Statesptr->fv1 != ON && Statesptr->acceleration != ON) ||
 			Statesptr->fv2 == ON || Statesptr->dg2 == ON))
 	{
-		fprintf(stderr,"V9: SWMM coupling requires CUDA acceleration or CUDA fv1.\n");
+		fprintf(stderr,
+			"SWMM coupling requires acceleration or fv1 (CPU or CUDA).\n");
 		return 1;
 	}
 
@@ -886,10 +886,7 @@ void printversion(int verbose)
 // printout header with program and version number
 {
   printf("***************************\n");
-  printf(" LISFLOOD-SWMM engine V11 | numeric=%s | built=%s %s\n",NUMERIC_TYPE_NAME,__DATE__,__TIME__);
-#ifdef LISFLOOD_BUILD_ID
-  printf(" Source ID: %s\n",LISFLOOD_BUILD_ID);
-#endif
+  printf(" LISFLOOD-SWMM | numeric=%s | built=%s %s\n",NUMERIC_TYPE_NAME,__DATE__,__TIME__);
   if (verbose == ON)
   {
 #if defined (__INTEL_COMPILER)

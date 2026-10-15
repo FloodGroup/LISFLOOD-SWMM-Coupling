@@ -13,7 +13,7 @@
 #include <cmath>
 #define ERRCODE 2
 static thread_local char nc_context[1200] = "unspecified file";
-#define ERR(e) {fprintf(stderr, "V11 NetCDF ERROR code=%d message=%s context=%s function=%s line=%d\n", (int)(e), nc_strerror(e), nc_context, __func__, __LINE__); fflush(stderr); exit(ERRCODE);}
+#define ERR(e) {fprintf(stderr, "NetCDF ERROR code=%d message=%s context=%s function=%s line=%d\n", (int)(e), nc_strerror(e), nc_context, __func__, __LINE__); fflush(stderr); exit(ERRCODE);}
 
 #if _NUMERIC_MODE == 1
 #define nc_put_att_NUMERIC_TYPE nc_put_att_double
@@ -348,14 +348,14 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
 
   if (ncvar->tlen < 2 || ncvar->xlen < 2 || ncvar->ylen < 2 ||
       ncvar->xlen > 2147483647ULL / ncvar->ylen) {
-    fprintf(stderr, "V11 invalid rainfall dimensions: %s time=%zu x=%zu y=%zu\n",
+    fprintf(stderr, "invalid rainfall dimensions: %s time=%zu x=%zu y=%zu\n",
         ncfilename, ncvar->tlen, ncvar->xlen, ncvar->ylen); exit(ERRCODE);
   }
   int ndims, dims[NC_MAX_VAR_DIMS];
   if ((retval = nc_inq_varndims(ncvar->ncid,ncvar->varid,&ndims))) ERR(retval);
   if ((retval = nc_inq_vardimid(ncvar->ncid,ncvar->varid,dims))) ERR(retval);
   if (ndims != 3 || dims[0] != time_dimid || dims[1] != y_dimid || dims[2] != x_dimid) {
-    fprintf(stderr,"V11 rainfall must have dimensions (time,y,x): %s\n",ncfilename); exit(ERRCODE);
+    fprintf(stderr,"rainfall must have dimensions (time,y,x): %s\n",ncfilename); exit(ERRCODE);
   }
   ncvar->has_fill = ncvar->has_missing = false;
   for(int a=0;a<2;++a) {
@@ -364,7 +364,7 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
     int status=nc_inq_attlen(ncvar->ncid,ncvar->varid,name,&count);
     if(status==NC_ENOTATT) continue;
     if(status!=NC_NOERR) ERR(status);
-    if(count!=1) { fprintf(stderr,"V11 %s must be scalar: %s\n",name,ncfilename); exit(ERRCODE); }
+    if(count!=1) { fprintf(stderr,"%s must be scalar: %s\n",name,ncfilename); exit(ERRCODE); }
     if((retval=nc_get_att_double(ncvar->ncid,ncvar->varid,name,a?&ncvar->missing_value:&ncvar->fill_value))) ERR(retval);
     if(a) ncvar->has_missing=true; else ncvar->has_fill=true;
   }
@@ -374,16 +374,16 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
     size_t len=0; char units[256] = {};
     int status=nc_inq_attlen(ncvar->ncid,id,"units",&len);
     if (status == NC_ENOTATT) {
-      fprintf(stderr,"V11 WARNING %s missing %s units; assuming %s\n",ncfilename,
+      fprintf(stderr,"WARNING %s missing %s units; assuming %s\n",ncfilename,
           unit_i ? "rainfall_depth" : "time",unit_i ? "mm per interval" : "hours");
       continue;
     }
     if (status != NC_NOERR) ERR(status);
-    if (len >= sizeof(units)) { fprintf(stderr,"V11 invalid units: %s\n",ncfilename); exit(ERRCODE); }
+    if (len >= sizeof(units)) { fprintf(stderr,"invalid units: %s\n",ncfilename); exit(ERRCODE); }
     if ((retval=nc_get_att_text(ncvar->ncid,id,"units",units))) ERR(retval);
     bool accepted = unit_i ? strcmp(units,"mm")==0 :
         (strcmp(units,"hours")==0 || strcmp(units,"hour")==0 || strncmp(units,"hours since ",12)==0);
-    if (!accepted) { fprintf(stderr,"V11 unsupported %s units='%s' in %s\n",unit_i?"rainfall":"time",units,ncfilename); exit(ERRCODE); }
+    if (!accepted) { fprintf(stderr,"unsupported %s units='%s' in %s\n",unit_i?"rainfall":"time",units,ncfilename); exit(ERRCODE); }
   }
 
   size_t start[] = {0};
@@ -397,7 +397,7 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
     if (!std::isfinite(ncvar->times[i]) || !std::isfinite(ncvar->times[i]*C(3600.0)) ||
         (i && ncvar->times[i]*C(3600.0) <= ncvar->times[i-1]*C(3600.0)) ||
         (!i && ncvar->times[i] != C(0.0))) {
-      fprintf(stderr,"V11 invalid rainfall time axis file=%s index=%zu value=%.12g (must start at zero and strictly increase)\n",ncfilename,i,(double)ncvar->times[i]); exit(ERRCODE);
+      fprintf(stderr,"invalid rainfall time axis file=%s index=%zu value=%.12g (must start at zero and strictly increase)\n",ncfilename,i,(double)ncvar->times[i]); exit(ERRCODE);
     }
   }
 
@@ -419,18 +419,18 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
     for(size_t i=0;i<count;++i) {
       if (!std::isfinite(values[i]) || (axis ? spacing>=0 : spacing<=0) ||
           (i && fabs(((double)values[i]-values[i-1])-spacing)>fabs(spacing)*1.e-4)) {
-        fprintf(stderr,"V11 invalid rainfall %s coordinates at index %zu in %s\n",axis?"y":"x",i,ncfilename); exit(ERRCODE);
+        fprintf(stderr,"invalid rainfall %s coordinates at index %zu in %s\n",axis?"y":"x",i,ncfilename); exit(ERRCODE);
       }
     }
   }
-  printf("V11 RAIN metadata file=%s frames=%zu grid=%zux%zu units=interval_mm time_units=hours last_interval_duration_inferred_from_previous=yes\n",ncfilename,ncvar->tlen,ncvar->xlen,ncvar->ylen);
-  const char* attrs[]={"case_version","storm_type","spatial_distribution","rainfall_forcing_type","V5_scenario","simulation_start_PST","simulation_end_PST"};
+  printf("RAIN metadata file=%s frames=%zu grid=%zux%zu units=interval_mm time_units=hours last_interval_duration_inferred_from_previous=yes\n",ncfilename,ncvar->tlen,ncvar->xlen,ncvar->ylen);
+  const char* attrs[]={"case_version","storm_type","spatial_distribution","rainfall_forcing_type","simulation_start_PST","simulation_end_PST"};
   for(const char* name:attrs) {
     size_t length=0; nc_type type;
     if(nc_inq_att(ncvar->ncid,NC_GLOBAL,name,&type,&length)==NC_NOERR && type==NC_CHAR && length<1024) {
       char value[1024]={};
       if(nc_get_att_text(ncvar->ncid,NC_GLOBAL,name,value)==NC_NOERR)
-        printf("V11 RAIN input_metadata %s=%s (descriptive only; time/values drive forcing)\n",name,value);
+        printf("RAIN input_metadata %s=%s (descriptive only; time/values drive forcing)\n",name,value);
     }
   }
 }
@@ -466,7 +466,7 @@ bool read_file_netCDF(NetCDFVariable *ncvar, NUMERIC_TYPE curr_time, bool second
     size_t count[] = {1, ncvar->ylen, ncvar->xlen};
     if (retval = NC_GET_VARA_NUMERIC_TYPE(ncvar->ncid, ncvar->varid, start,
                 count, ncvar->data)) ERR(retval);
-    printf("V11 RAIN frame=%zu start_hours=%.9g interval_hours=%.9g file=%s\n",
+    printf("RAIN frame=%zu start_hours=%.9g interval_hours=%.9g file=%s\n",
         ncvar->time_idx,(double)ncvar->times[ncvar->time_idx],(double)ncvar->dt,ncvar->source_name);
   }
 

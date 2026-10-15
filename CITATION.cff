@@ -7,15 +7,19 @@ authors:
   - name: FloodGroup
 license: GPL-2.0-only
 abstract: >
-  Two-way coupling of the GPU 2-D flood model LISFLOOD-FP (8.1.0, commit
-  637106b; CUDA ACC and FV1 solvers) with the 1-D sewer model EPA SWMM 5.1.015
-  in a single executable. Manholes exchange water through orifice and weir laws
-  in both directions, a new COUPLED outfall type discharges into finite-volume
-  2-D receiving cells, and SWMM node flooding is returned to the surface.
+  Two-way coupling of the 2-D flood model LISFLOOD-FP (8.1.0, commit 637106b)
+  with the 1-D sewer model EPA SWMM 5.1.015 in a single executable. The ACC and
+  FV1 surface solvers are coupled on multi-core CPUs (OpenMP) and on NVIDIA GPUs
+  (CUDA) with the same exchange law. Manholes exchange water in both directions
+  through orifice (surcharge, submerged inflow) and weir (free inflow) laws, a
+  new COUPLED outfall type discharges into finite-volume 2-D receiving cells,
+  and SWMM node flooding is returned to the surface.
 keywords:
   - flood
   - LISFLOOD-FP
   - SWMM
   - coupling
   - urban drainage
+  - CPU
   - GPU
+  - CUDA

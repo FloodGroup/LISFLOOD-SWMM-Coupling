@@ -158,7 +158,7 @@ void lis::cuda::fv1::Simulation::run
 
 	Flow& d_U = solve->d_U();
 	stats_collector.initialise_volume(d_U.H);
-	V11RunAudit audit(filenames.resrootname,"CUDA_FV1",swmm_coupled,stats_collector.previous_volume,solver.Sim_Time);
+	RunAudit audit(filenames.resrootname,"CUDA_FV1",swmm_coupled,stats_collector.previous_volume,solver.Sim_Time);
 
 	//------------------------------------------------------------------------------------------------------------
 	if (swmm_coupled)
@@ -382,7 +382,7 @@ void lis::cuda::fv1::Simulation::run
 		}
 		if (cuda::dt <= C(0.0)) break;
 		solver.MinTstep = FMIN(solver.MinTstep, cuda::dt);
-		// V11: use remaining water after net rain for the inlet budget.
+		// Use remaining water after net rain for the inlet budget.
 		stats_collector.zero_instantaneous_mass();
 		if (rain.enabled()) {
 			rain.update_time(solver.t);

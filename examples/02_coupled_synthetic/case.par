@@ -7,7 +7,6 @@ initial_tstep   1.0
 massint         10.0
 saveint         60.0
 elevoff
-cuda
 acceleration
 swmminp         network.inp
 swmmrpt         network.rpt

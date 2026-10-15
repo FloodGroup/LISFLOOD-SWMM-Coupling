@@ -116,8 +116,8 @@ lis::StatsEntry lis::cuda::StatsCollector::create_entry
 {
 	NUMERIC_TYPE current_volume = volume(H);
 	if (!std::isfinite(current_volume)) {
-		fprintf(stderr,"V11 ERROR nonfinite 2D storage at time_s=%.12g\n",(double)solver.t);
-		throw std::runtime_error("V11 nonfinite 2D storage");
+		fprintf(stderr,"ERROR nonfinite 2D storage at time_s=%.12g\n",(double)solver.t);
+		throw std::runtime_error("nonfinite 2D storage");
 	}
 	NUMERIC_TYPE volume_change = current_volume - previous_volume;
 	previous_volume = current_volume;

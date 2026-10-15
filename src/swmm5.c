@@ -420,7 +420,7 @@ int DLLEXPORT swmm_step(double *elapsedTime)
             int outfallIndex = Node[i].subIndex;
             if (Outfall[outfallIndex].type == COUPLED_OUTFALL &&
                 !Outfall[outfallIndex].externalStageActive) {
-                fprintf(stderr, "V8: COUPLED outfall %s has no LISFLOOD stage; use CUDA FV1/ACC coupling and a valid 2D cell.\n", Node[i].ID);
+                fprintf(stderr, "COUPLED outfall %s has no surface stage; it needs a valid 2-D cell.\n", Node[i].ID);
                 ErrorCode = ERR_SYSTEM;
                 return error_getCode(ErrorCode);
             }
@@ -429,7 +429,7 @@ int DLLEXPORT swmm_step(double *elapsedTime)
     }
     if (!coupled_ready())
     {
-        fprintf(stderr,"V9: COUPLED requires a mapped receiving cell and finite water budget before every exchange.\n");
+        fprintf(stderr,"COUPLED requires a mapped receiving cell and finite water budget before every exchange.\n");
         ErrorCode=ERR_SYSTEM; return error_getCode(ErrorCode);
     }
 
@@ -768,7 +768,7 @@ int DLLEXPORT swmm_resetTimeStep(double timeStep) {
     return 0;
 }
 
-// V8: stage is an absolute elevation in metres, referenced to the same
+// Stage is an absolute elevation in metres, referenced to the same
 // vertical datum as the SWMM node invert. SWMM hydraulics use feet internally.
 int DLLEXPORT swmm_setOutfallExternalStage(int nodeIndex, double stageMetres)
 {

@@ -2,13 +2,13 @@
 
 # LISFLOOD-FP × SWMM
 
-**Two-way coupling of a GPU 2-D surface flood model and a 1-D urban drainage model**
+**Two-way coupling of a 2-D surface flood model and a 1-D urban drainage model, on CPU or GPU**
 
 [![Licence: GPL-2.0](https://img.shields.io/badge/licence-GPL--2.0-2C5577.svg)](LICENSE)
-[![Release v1.0.0](https://img.shields.io/badge/release-v1.0.0-2E7D5B.svg)](https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/github/v/release/FloodGroup/LISFLOOD-SWMM-Coupling?label=release&color=2E7D5B)](https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling/releases/latest)
 [![LISFLOOD-FP 8.1](https://img.shields.io/badge/LISFLOOD--FP-8.1.0-3F6F9A.svg)](https://zenodo.org/records/6912932)
 [![EPA SWMM 5.1.015](https://img.shields.io/badge/EPA%20SWMM-5.1.015-3F7F6E.svg)](https://github.com/USEPA/Stormwater-Management-Model)
-[![CUDA](https://img.shields.io/badge/CUDA-required%20for%20coupling-B4643A.svg)](https://developer.nvidia.com/cuda-toolkit)
+[![Compute: CPU | CUDA](https://img.shields.io/badge/compute-CPU%20%7C%20CUDA-B4643A.svg)](docs/user_guide.md#2-build)
 [![CMake](https://img.shields.io/badge/build-CMake%20%E2%89%A5%203.13-7A7A7A.svg)](https://cmake.org)
 
 [Overview](#overview) ·
@@ -25,9 +25,9 @@
 
 ## Overview
 
-This repository couples the 2-D hydrodynamic model [LISFLOOD-FP](https://www.bristol.ac.uk/geography/research/hydrology/models/lisflood/) with the 1-D sewer model [EPA SWMM](https://www.epa.gov/water-research/storm-water-management-model-swmm) inside a single executable. Surface water and pipe water exchange in both directions while both models run:
+This repository couples the 2-D hydrodynamic model [LISFLOOD-FP](https://www.bristol.ac.uk/geography/research/hydrology/models/lisflood/) with the 1-D sewer model [EPA SWMM](https://www.epa.gov/water-research/storm-water-management-model-swmm) inside a single executable. Surface water and pipe water exchange in both directions while both models run, with the 2-D model on multi-core CPUs (OpenMP) or on an NVIDIA GPU (CUDA):
 
-- **Manholes** drain surface water into the sewer, or spill sewer water onto the street when the network surcharges. Discharge follows orifice and weir laws driven by the head difference between the two models.
+- **Manholes** drain surface water into the sewer, or spill sewer water onto the street when the network surcharges. Surcharge and drowned inflow follow orifice laws, and free inflow over the manhole crest follows a weir law, all driven by the head difference between the two models.
 - **`COUPLED` outfalls**, a new SWMM outfall type, let the sewer discharge into a river or coastal cell of the 2-D grid and take water back when that cell is higher. The receiving cell is treated as a finite volume, so the outfall cannot create or lose water.
 - **SWMM node flooding** is returned to the 2-D cell above the node instead of disappearing from the model.
 
@@ -35,20 +35,24 @@ Both physics engines are unchanged: LISFLOOD-FP still solves the shallow-water e
 
 | | |
 |---|---|
-| **Surface solvers** | CUDA ACC (local inertia) and CUDA FV1 (first-order Godunov) |
+| **Coupled surface solvers** | ACC (local inertia) and FV1 (first-order Godunov), each on CPU or GPU |
+| **Back ends** | CPU with OpenMP; CUDA GPU when built with a CUDA compiler. One keyword (`cuda`) switches a case between them. |
+| **Exchange law** | identical on CPU and GPU: orifice surcharge, weir free inflow, orifice submerged inflow |
 | **Exchange interval** | every 2-D step, or every *T* seconds with exact time landing |
-| **Data transfer** | only the depths of coupled cells move between GPU and host |
-| **Mass balance** | volume-based continuity at coupled outfalls, plus a per-run water-balance audit |
+| **Data transfer on GPU** | only the depths of coupled cells move between device and host |
+| **Mass balance** | volume-based continuity at coupled outfalls, supply-limited withdrawals everywhere, and a per-run water-balance audit on GPU |
 
 ## How the coupling works
 
 <p align="center">
-  <img src="docs/figures/layers.svg" width="100%" alt="Three-column architecture: LISFLOOD-FP modules on the left, the coupling layer in the middle, SWMM modules on the right, with arrows for depth, point sources, Node_Inflow, receiving-cell geometry, exchange volume and stored volume.">
+  <img src="docs/figures/layers.svg" width="100%" alt="Three-column architecture: LISFLOOD-FP (CPU or CUDA) on the left, the coupling layer in the middle, SWMM on the right, with arrows for depth, point sources, Node_Inflow, receiving-cell geometry, exchange volume and stored volume.">
 </p>
 
 Each 2-D time step, the coupler reads the water depth in every cell that contains a manhole, computes the manhole discharge, and adds it to the surface as a point source. The same discharge is accumulated as inflow for SWMM. When an exchange is due, SWMM advances by exactly the elapsed interval using its own sub-steps. It receives the accumulated inflow as a constant rate and the current water level of every receiving cell. SWMM then returns the volume that actually crossed each `COUPLED` outfall and each flooded node, and LISFLOOD-FP applies those volumes to the surface.
 
-The full derivation, every equation with the function that implements it, and the time-synchronisation rules are in [**docs/coupling_methodology.md**](docs/coupling_methodology.md).
+The CPU and CUDA drivers run this cycle with the same equations, the same limits and the same exchange clock.
+
+The full derivation, every equation with the CPU and CUDA functions that implement it, and the time-synchronisation rules are in [**docs/coupling_methodology.md**](docs/coupling_methodology.md).
 
 ## Quick start
 
@@ -56,10 +60,10 @@ The full derivation, every equation with the function that implements it, and th
 
 | | |
 |---|---|
-| GPU | NVIDIA GPU with CUDA Toolkit ≥ 11 (coupled runs are GPU-only) |
 | Compiler | MSVC 2019 / 2022 on Windows, or GCC / Clang on Linux (C++14) |
 | Build | CMake ≥ 3.13, OpenMP |
 | Libraries | NetCDF + HDF5 + zlib (can be disabled), `libnuma` on Linux |
+| GPU (optional) | NVIDIA GPU with CUDA Toolkit ≥ 11, for GPU acceleration |
 
 ### Build
 
@@ -74,7 +78,7 @@ cmake --build build --target lisflood -j
 .\tools\build.ps1 -VcVars "C:\...\vcvars64.bat" -CMake "C:\...\cmake.exe" -CudaArchitecture 86
 ```
 
-Set `CMAKE_CUDA_ARCHITECTURES` to your GPU's compute capability (86 for RTX 30xx, 89 for RTX 40xx). Windows NetCDF libraries and other build options are covered in the [user guide](docs/user_guide.md#2-build).
+If CMake finds a CUDA compiler, the executable contains both the CPU and the CUDA solvers; otherwise it is a CPU build. `CMAKE_CUDA_ARCHITECTURES` is your GPU's compute capability (86 for RTX 30xx, 89 for RTX 40xx) and is ignored in a CPU build. Windows NetCDF libraries and other build options are covered in the [user guide](docs/user_guide.md#2-build).
 
 ### Run the coupled example
 
@@ -83,11 +87,13 @@ cd examples/02_coupled_synthetic
 lisflood case.par
 ```
 
-A coupled `.par` file adds five keywords to a normal LISFLOOD-FP run:
+The example runs on the CPU. Add a line `cuda` to `case.par` to run it on the GPU.
+
+A coupled `.par` file adds a few keywords to a normal LISFLOOD-FP run:
 
 ```text
-cuda
 acceleration                    # or fv1
+cuda                            # optional: run the 2-D solver on the GPU
 swmminp      network.inp        # SWMM network with COUPLED outfalls
 floodconfig  floodconfig.txt    # manhole <-> cell exchange table
 coupleint    step               # or a positive number of seconds
@@ -97,7 +103,7 @@ coupleint    step               # or a positive number of seconds
 
 | Document | What it covers |
 |---|---|
-| [User guide](docs/user_guide.md) | Building, preparing a coupled case, every coupling keyword, the `floodconfig` format, outputs, hotstart, troubleshooting |
+| [User guide](docs/user_guide.md) | Building for CPU or GPU, preparing a coupled case, every coupling keyword, the `floodconfig` format, outputs, hotstart, troubleshooting |
 | [Coupling methodology](docs/coupling_methodology.md) | Architecture, the step-by-step exchange cycle, manhole and outfall equations, time synchronisation, mass-balance audit |
 | [Examples](examples/README.md) | Two small runnable cases: surface-only smoke test and a synthetic coupled network |
 | [Source map](src/README.md) | Where the coupling code lives inside `src/`, and what was changed relative to upstream |
@@ -113,7 +119,7 @@ coupleint    step               # or a positive number of seconds
 ├── examples/
 │   ├── 01_surface_only_drycheck/ standalone LISFLOOD-FP smoke test
 │   └── 02_coupled_synthetic/     minimal coupled case (one junction, one COUPLED outfall)
-├── src/                          LISFLOOD-FP 8.1 + SWMM 5.1.015 + coupling layer
+├── src/                          LISFLOOD-FP 8.1 + SWMM 5.1.015 + coupling layer (CPU and CUDA)
 ├── tools/
 │   ├── build.ps1                 Windows build script
 │   └── run.ps1                   Windows launcher used in the binary package

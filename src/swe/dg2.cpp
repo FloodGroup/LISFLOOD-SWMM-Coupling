@@ -1,4 +1,4 @@
-﻿#include "dg2.h"
+#include "dg2.h"
 #include "dg2/dg2_output.h"
 #include "dg2/fields.h"
 #include "dg2/friction.h"
@@ -65,32 +65,32 @@ void floodDG2::verticalcon::vcon_init
 	Pars* Parptr
 )
 {
-	//固定值----------------------------------------------------------------
-	verlink->node_Vindex = new int[verlink->count_index]();                       //节点配置文件中的节点对应swmm中node数组的index
-	verlink->dem_Vindex = new int[verlink->count_index]();                        //节点配置文件中的节点对应dem网格的索引
-	verlink->dem_count = new int[Parptr->xsz * Parptr->ysz]();                    //dem每个网格耦合的节点数量
-	verlink->node_surfelev = new double[verlink->count_index]();                  //节点配置文件中的节点对应swmm中的自然地面标高
-	verlink->node_c0 = new double[verlink->count_index]();                        //节点配置文件中的节点孔口系数
-	verlink->node_area = new double[verlink->count_index]();					  //节点配置文件中的节点过流截面积
-	verlink->node_qoutmax = new double[verlink->count_index]();                   //节点配置文件中的节点溢流最大流量
-	verlink->node_cw = new double[verlink->count_index]();                        //节点配置文件中的节点堰流系数
-	verlink->node_w = new double[verlink->count_index]();                         //节点配置文件中的节点周长或边长
-	verlink->node_qinmax = new double[verlink->count_index]();                    //节点配置文件中的节点回水最大流量
-	verlink->node_c1 = new double[verlink->count_index]();                        //节点配置文件中的节点孔口系数特指入流
-	verlink->node_area1 = new double[verlink->count_index]();                     //节点配置文件中的节点过流截面积特指入流
 
-	verlink->count_dem_index = verlink->count_index;                              //节点配置文件中的节点对应dem网格的索引个数(去重之后)
-	verlink->dem_Vindex_uni = new int[verlink->count_index]();                    //节点配置文件中的节点对应dem网格的索引列表(去重之后)
-	//verlink->flow_type = new int[verlink->count_index]();                       //节点配置文件中的节点对应交换流量计算方法
+	verlink->node_Vindex = new int[verlink->count_index]();
+	verlink->dem_Vindex = new int[verlink->count_index]();
+	verlink->dem_count = new int[Parptr->xsz * Parptr->ysz]();
+	verlink->node_surfelev = new double[verlink->count_index]();
+	verlink->node_c0 = new double[verlink->count_index]();
+	verlink->node_area = new double[verlink->count_index]();
+	verlink->node_qoutmax = new double[verlink->count_index]();
+	verlink->node_cw = new double[verlink->count_index]();
+	verlink->node_w = new double[verlink->count_index]();
+	verlink->node_qinmax = new double[verlink->count_index]();
+	verlink->node_c1 = new double[verlink->count_index]();
+	verlink->node_area1 = new double[verlink->count_index]();
 
-	verlink->dem_xi = new int[verlink->count_index]();                            //节点配置文件中的节点对应DEM的x索引
-	verlink->dem_yi = new int[verlink->count_index]();							  //节点配置文件中的节点对应DEM的y索引
+	verlink->count_dem_index = verlink->count_index;
+	verlink->dem_Vindex_uni = new int[verlink->count_index]();
+
+
+	verlink->dem_xi = new int[verlink->count_index]();
+	verlink->dem_yi = new int[verlink->count_index]();
 	//----------------------------------------------------------------------
-	//每轮计算改变值---------------------------------------------------------
-	verlink->flow_1D_node = new double[verlink->count_index]();                   //节点配置文件中的节点 溢流或回流流量数组(对应一维)
-	verlink->flow_2D_node = new double[verlink->count_index]();                   //节点配置文件中的节点 溢流或回流流量数组(对应二维)
-	verlink->flow_2D_dem = new double[Parptr->xsz * Parptr->ysz]();               //二维流量各个网格的溢流或回流
-	verlink->flow_neg_count = new int[Parptr->xsz * Parptr->ysz]();               //二维回流计数
+
+	verlink->flow_1D_node = new double[verlink->count_index]();
+	verlink->flow_2D_node = new double[verlink->count_index]();
+	verlink->flow_2D_dem = new double[Parptr->xsz * Parptr->ysz]();
+	verlink->flow_neg_count = new int[Parptr->xsz * Parptr->ysz]();
 	//----------------------------------------------------------------------
 	return;
 }
@@ -192,9 +192,9 @@ void floodDG2::verticalcon::demcountuni_cal
 )
 {
 	int count_init = verlink->count_index;
-	int k_temp = 0; //记录多少个无index的node
+	int k_temp = 0;
 	memcpy(verlink->dem_Vindex_uni, verlink->dem_Vindex, verlink->count_index * sizeof(int));
-	//去除index==-9999的索引
+
 	for (size_t m = 0; m < verlink->count_index; m++)
 	{
 		if (verlink->dem_Vindex_uni[m] == -9999)
@@ -215,14 +215,14 @@ void floodDG2::verticalcon::demcountuni_cal
 		}
 	}
 
-	// 记录每个网格有多少个节点相连
+
 	for (int k = 0; k < verlink->count_index; ++k)
 	{
 		if (verlink->dem_Vindex[k] != -9999)
 			verlink->dem_count[verlink->dem_Vindex[k]] += 1;
 	}
 
-	// demindex去重
+
 	for (size_t i = 0; i < count_init; i++)
 	{
 		for (size_t j = i + 1; j < count_init; j++)
@@ -292,7 +292,7 @@ void floodDG2::verticalcon::cal_exchange_flow
 	Solver* Solverptr
 )
 {
-	double H1D, H2D, Z, h2D; //一维水面标高 二维水面标高 分界面标高 二维水深 m
+	double H1D, H2D, Z, h2D;
 	double flow_exchange;
 
 	for (size_t i = 0; i < verlink->count_index; i++)
@@ -359,7 +359,7 @@ void floodDG2::verticalcon::cal_exchange_flow
 		}
 	}
 	//printf("--------------------------------------------------------------------------\n");
-	//统计各个网格回流数
+
 	for (size_t k = 0; k < verlink->count_index; k++)
 	{
 		if (verlink->dem_Vindex[k] == -9999)
@@ -484,7 +484,7 @@ void dg2::solve
 	const int verbose
 )
 {
-	//耦合结构体设置
+
 	//--------------------------------------------------------------------------------------------
 
 	double elapsedTime = 0.0;

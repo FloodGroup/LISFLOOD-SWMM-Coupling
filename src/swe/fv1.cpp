@@ -1,4 +1,4 @@
-﻿#include "fv1.h"
+#include "fv1.h"
 #include "fv1/modifiedvars.h"
 #include "boundary.h"
 #include "hll.h"
@@ -8,9 +8,11 @@
 #include <stdio.h>
 #include <float.h>
 #include "../geometry.h"
+#include "../cpu_coupling.h"
 extern "C" {
 #include "../headers.h"
 };
+#include "../swmm_couple.h"
 #include "../swmm5.h"
 
 namespace floodfv1 {
@@ -22,7 +24,8 @@ namespace floodfv1 {
 		static void cal_dem_index(Vconnect* verlink, FILE* flood_error, Pars* Parptr, Arrays* Arrptr);
 		static void demcountuni_cal(Vconnect* verlink);
 		static void check_nodedepth(Vconnect* verlink, FILE* flood_error, Arrays* Arrptr);
-		static void cal_exchange_flow(Vconnect* verlink, Arrays* Arrptr, Pars* Parptr, Solver* Solverptr);
+		static void cal_exchange_flow(Vconnect* verlink, Arrays* Arrptr, Pars* Parptr,
+			Solver* Solverptr, const double* pending_volumes);
 		static NUMERIC_TYPE orificeflow_cal(NUMERIC_TYPE c0, NUMERIC_TYPE area, NUMERIC_TYPE H1D, NUMERIC_TYPE H2D);
 		static NUMERIC_TYPE weirflow_cal(NUMERIC_TYPE cw, NUMERIC_TYPE w, NUMERIC_TYPE h2d);
 		static void free_vcon(Vconnect* verlink);
@@ -62,32 +65,32 @@ void floodfv1::verticalcon::vcon_init
 	Pars* Parptr
 )
 {
-	//固定值----------------------------------------------------------------
-	verlink->node_Vindex = new int[verlink->count_index]();                       //节点配置文件中的节点对应swmm中node数组的index
-	verlink->dem_Vindex = new int[verlink->count_index]();                        //节点配置文件中的节点对应dem网格的索引
-	verlink->dem_count = new int[Parptr->xsz * Parptr->ysz]();                    //dem每个网格耦合的节点数量
-	verlink->node_surfelev = new double[verlink->count_index]();                  //节点配置文件中的节点对应swmm中的自然地面标高
-	verlink->node_c0 = new double[verlink->count_index]();                        //节点配置文件中的节点孔口系数
-	verlink->node_area = new double[verlink->count_index]();					  //节点配置文件中的节点过流截面积
-	verlink->node_qoutmax = new double[verlink->count_index]();                   //节点配置文件中的节点溢流最大流量
-	verlink->node_cw = new double[verlink->count_index]();                        //节点配置文件中的节点堰流系数
-	verlink->node_w = new double[verlink->count_index]();                         //节点配置文件中的节点周长或边长
-	verlink->node_qinmax = new double[verlink->count_index]();                    //节点配置文件中的节点回水最大流量
-	verlink->node_c1 = new double[verlink->count_index]();                        //节点配置文件中的节点孔口系数特指入流
-	verlink->node_area1 = new double[verlink->count_index]();                     //节点配置文件中的节点过流截面积特指入流
 
-	verlink->count_dem_index = verlink->count_index;                              //节点配置文件中的节点对应dem网格的索引个数(去重之后)
-	verlink->dem_Vindex_uni = new int[verlink->count_index]();                    //节点配置文件中的节点对应dem网格的索引列表(去重之后)
-	//verlink->flow_type = new int[verlink->count_index]();                       //节点配置文件中的节点对应交换流量计算方法
+	verlink->node_Vindex = new int[verlink->count_index]();
+	verlink->dem_Vindex = new int[verlink->count_index]();
+	verlink->dem_count = new int[Parptr->xsz * Parptr->ysz]();
+	verlink->node_surfelev = new double[verlink->count_index]();
+	verlink->node_c0 = new double[verlink->count_index]();
+	verlink->node_area = new double[verlink->count_index]();
+	verlink->node_qoutmax = new double[verlink->count_index]();
+	verlink->node_cw = new double[verlink->count_index]();
+	verlink->node_w = new double[verlink->count_index]();
+	verlink->node_qinmax = new double[verlink->count_index]();
+	verlink->node_c1 = new double[verlink->count_index]();
+	verlink->node_area1 = new double[verlink->count_index]();
 
-	verlink->dem_xi = new int[verlink->count_index]();                            //节点配置文件中的节点对应DEM的x索引
-	verlink->dem_yi = new int[verlink->count_index]();							  //节点配置文件中的节点对应DEM的y索引
+	verlink->count_dem_index = verlink->count_index;
+	verlink->dem_Vindex_uni = new int[verlink->count_index]();
+
+
+	verlink->dem_xi = new int[verlink->count_index]();
+	verlink->dem_yi = new int[verlink->count_index]();
 	//----------------------------------------------------------------------
-	//每轮计算改变值---------------------------------------------------------
-	verlink->flow_1D_node = new double[verlink->count_index]();                   //节点配置文件中的节点 溢流或回流流量数组(对应一维)
-	verlink->flow_2D_node = new double[verlink->count_index]();                   //节点配置文件中的节点 溢流或回流流量数组(对应二维)
-	verlink->flow_2D_dem = new double[Parptr->xsz * Parptr->ysz]();               //二维流量各个网格的溢流或回流
-	verlink->flow_neg_count = new int[Parptr->xsz * Parptr->ysz]();               //二维回流计数
+
+	verlink->flow_1D_node = new double[verlink->count_index]();
+	verlink->flow_2D_node = new double[verlink->count_index]();
+	verlink->flow_2D_dem = new double[Parptr->xsz * Parptr->ysz]();
+	verlink->flow_neg_count = new int[Parptr->xsz * Parptr->ysz]();
 	//----------------------------------------------------------------------
 	return;
 }
@@ -189,9 +192,9 @@ void floodfv1::verticalcon::demcountuni_cal
 )
 {
 	int count_init = verlink->count_index;
-	int k_temp = 0; //记录多少个无index的node
+	int k_temp = 0;
 	memcpy(verlink->dem_Vindex_uni, verlink->dem_Vindex, verlink->count_index * sizeof(int));
-	//去除index==-9999的索引
+
 	for (size_t m = 0; m < verlink->count_index; m++)
 	{
 		if (verlink->dem_Vindex_uni[m] == -9999)
@@ -212,14 +215,14 @@ void floodfv1::verticalcon::demcountuni_cal
 		}
 	}
 
-	// 记录每个网格有多少个节点相连
+
 	for (int k = 0; k < verlink->count_index; ++k)
 	{
 		if (verlink->dem_Vindex[k] != -9999)
 			verlink->dem_count[verlink->dem_Vindex[k]] += 1;
 	}
 
-	// demindex去重
+
 	for (size_t i = 0; i < count_init; i++)
 	{
 		for (size_t j = i + 1; j < count_init; j++)
@@ -286,10 +289,11 @@ void floodfv1::verticalcon::cal_exchange_flow
 	Vconnect* verlink,
 	Arrays* Arrptr,
 	Pars* Parptr,
-	Solver* Solverptr
+	Solver* Solverptr,
+	const double* pending_volumes
 )
 {
-	double H1D, H2D, Z, h2D; //一维水面标高 二维水面标高 分界面标高 二维水深 m
+	double H1D, H2D, Z, h2D;
 	double flow_exchange;
 
 	for (size_t i = 0; i < verlink->count_index; i++)
@@ -315,26 +319,27 @@ void floodfv1::verticalcon::cal_exchange_flow
 				H1D,
 				H2D);
 			flow_exchange = getmin(flow_exchange, verlink->node_qoutmax[i]);
+			const double stored = swmm_getNodeAvailableCoupledVolume(
+				verlink->node_Vindex[i]);
+			if (stored >= 0.0)
+			{
+				const double pending = pending_volumes ? pending_volumes[i] : 0.0;
+				flow_exchange = getmin(flow_exchange,
+					getmax(0.0, stored + pending) / Solverptr->Tstep);
+			}
 			verlink->flow_1D_node[i] = -1 * flow_exchange;
 			verlink->flow_2D_node[i] = flow_exchange;
 			//printf("C:%lf,area:%lf,par:%lf\n", verlink->node_c0[i], verlink->node_area[i], 2.0 * SI_GRAVITY * (H1D - H2D));
 		}
 		else if ((H1D <= Z + COUPLING_HEAD_TOL) && (H2D - Z > COUPLING_HEAD_TOL))
 		{
-			
+			// Free inlet: use the crest-controlled weir relation. The
+			// submerged branch below remains an orifice relation.
 			flow_exchange = weirflow_cal(verlink->node_cw[i],
 				verlink->node_w[i],
 				(H2D - Z));
 			verlink->flow_1D_node[i] = flow_exchange;
 			verlink->flow_2D_node[i] = flow_exchange * -1;
-			/*
-			flow_exchange = orificeflow_cal(verlink->node_c1[i],
-				verlink->node_area1[i],
-				H2D,
-				H1D);
-			verlink->flow_1D_node[i] = flow_exchange;
-			verlink->flow_2D_node[i] = flow_exchange * -1;
-			*/
 			//printf("C:%lf,area:%lf,par:%lf\n", verlink->node_c1[i], verlink->node_area1[i], 2.0 * SI_GRAVITY * (H2D - H1D));
 		}
 		else if ((H1D >= Z - COUPLING_HEAD_TOL) && (H2D - H1D > COUPLING_HEAD_TOL))
@@ -356,7 +361,7 @@ void floodfv1::verticalcon::cal_exchange_flow
 		}
 	}
 	//printf("--------------------------------------------------------------------------\n");
-	//统计各个网格回流数
+
 	for (size_t k = 0; k < verlink->count_index; k++)
 	{
 		if (verlink->dem_Vindex[k] == -9999)
@@ -381,7 +386,7 @@ void floodfv1::verticalcon::cal_exchange_flow
 			if (verlink->flow_neg_count[verlink->dem_Vindex[j]] == 0 || Arrptr->H[verlink->dem_Vindex[j]] < -DBL_EPSILON)
 			{
 				printf("wrong-------------------------------------------------------------\n");
-				printf("lf", verlink->flow_2D_node[j]);
+				printf("%lf", (double)verlink->flow_2D_node[j]);
 				continue;
 			}
 			else
@@ -481,7 +486,7 @@ void fv1::solve
 	const int verbose
 )
 {
-	//耦合结构体设置
+
 	//--------------------------------------------------------------------------------------------
 
 	double elapsedTime = 0.0;
@@ -504,6 +509,8 @@ void fv1::solve
 
 		floodfv1::verticalcon::load_floodinfo(Fnameptr, verlink, Parptr,
 				Arrptr, verbose);
+		lis::cpu_coupling::map_internal_outfalls(Fnameptr, verlink, Parptr,
+			Arrptr, verbose);
 	}
 	//--------------------------------------------------------------------------------------------
 
@@ -518,73 +525,63 @@ void fv1::solve
     DynamicRain<> rain(Fnameptr->dynamicrainfilename, verbose);
 
 	//--------------------------------------------------------------------
-	const int temp_numPS = BCptr->numPS;
+	const int temp_numPS = BCptr->numPS > 0 ? BCptr->numPS : 0;
+	const int surface_source_start = temp_numPS;
+	const int outfall_source_start = surface_source_start +
+		(swmm_coupled ? verlink->count_dem_index : 0);
+	const int coupled_source_end = outfall_source_start +
+		(swmm_coupled ? verlink->outfall_dem_count : 0);
 	if (swmm_coupled)
 	{
-	if (temp_numPS > 0)
-	{
-		int* temp_xpi = new int[temp_numPS + verlink->count_dem_index]();
-		int* temp_ypi = new int[temp_numPS + verlink->count_dem_index]();
-		ESourceType* temp_PS_Ident = new ESourceType[temp_numPS + verlink->count_dem_index];
-		NUMERIC_TYPE* temp_PS_Val = new NUMERIC_TYPE[temp_numPS + verlink->count_dem_index]();
-
-		memcpy(temp_xpi, BCptr->xpi, sizeof(int) * temp_numPS);
-		memcpy(temp_ypi, BCptr->ypi, sizeof(int) * temp_numPS);
-		memcpy(temp_PS_Ident, BCptr->PS_Ident, sizeof(ESourceType) * temp_numPS);
-		memcpy(temp_PS_Val, BCptr->PS_Val, sizeof(NUMERIC_TYPE) * temp_numPS);
-
-		for (size_t tempindex = 0; tempindex < verlink->count_dem_index; tempindex++)
+		int* temp_xpi = new int[coupled_source_end]();
+		int* temp_ypi = new int[coupled_source_end]();
+		ESourceType* temp_PS_Ident = new ESourceType[coupled_source_end];
+		NUMERIC_TYPE* temp_PS_Val = new NUMERIC_TYPE[coupled_source_end]();
+		if (temp_numPS > 0)
 		{
-			temp_xpi[temp_numPS + tempindex] = verlink->dem_xi[tempindex];
-			temp_ypi[temp_numPS + tempindex] = verlink->dem_yi[tempindex];
-			temp_PS_Ident[temp_numPS + tempindex] = QFIX4;
-			temp_PS_Val[temp_numPS + tempindex] = verlink->flow_2D_dem[verlink->dem_Vindex_uni[tempindex]];
+			memcpy(temp_xpi, BCptr->xpi, sizeof(int) * temp_numPS);
+			memcpy(temp_ypi, BCptr->ypi, sizeof(int) * temp_numPS);
+			memcpy(temp_PS_Ident, BCptr->PS_Ident,
+				sizeof(ESourceType) * temp_numPS);
+			memcpy(temp_PS_Val, BCptr->PS_Val,
+				sizeof(NUMERIC_TYPE) * temp_numPS);
+		}
+		for (int source = 0; source < verlink->count_dem_index; ++source)
+		{
+			const int p = surface_source_start + source;
+			temp_xpi[p] = verlink->dem_xi[source];
+			temp_ypi[p] = verlink->dem_yi[source];
+			temp_PS_Ident[p] = QFIX4;
+		}
+		for (int source = 0; source < verlink->outfall_dem_count; ++source)
+		{
+			const int p = outfall_source_start + source;
+			const int cell = verlink->outfall_dem_Vindex_uni[source];
+			temp_xpi[p] = cell % Parptr->xsz;
+			temp_ypi[p] = cell / Parptr->xsz;
+			temp_PS_Ident[p] = QFIX4;
 		}
 
 		delete[] BCptr->xpi;
 		delete[] BCptr->ypi;
 		delete[] BCptr->PS_Ident;
 		memory_free_legacy(&BCptr->PS_Val);
-
 		BCptr->xpi = temp_xpi;
 		BCptr->ypi = temp_ypi;
 		BCptr->PS_Ident = temp_PS_Ident;
 		BCptr->PS_Val = temp_PS_Val;
-		BCptr->numPS = temp_numPS + verlink->count_dem_index;
-	}
-	else
-	{
-		int* temp_xpi = new int[verlink->count_dem_index](); //used in legacy and read in
-		int* temp_ypi = new int[verlink->count_dem_index](); //used in legacy and read in
-		ESourceType* temp_PS_Ident = new ESourceType[verlink->count_dem_index];
-		NUMERIC_TYPE* temp_PS_Val = new NUMERIC_TYPE[verlink->count_dem_index]();
-
-		for (size_t tempindex = 0; tempindex < verlink->count_dem_index; tempindex++)
-		{
-			temp_xpi[tempindex] = verlink->dem_xi[tempindex];
-			temp_ypi[tempindex] = verlink->dem_yi[tempindex];
-			temp_PS_Ident[tempindex] = QFIX4;
-			temp_PS_Val[tempindex] = verlink->flow_2D_dem[verlink->dem_Vindex_uni[tempindex]];
-		}
-
-		delete[] BCptr->xpi;
-		delete[] BCptr->ypi;
-		delete[] BCptr->PS_Ident;
-		memory_free_legacy(&BCptr->PS_Val);
-		delete[] BCptr->PS_Name;
-
-		BCptr->PS_Ident = temp_PS_Ident;
-		BCptr->xpi = temp_xpi;
-		BCptr->ypi = temp_ypi;
-		BCptr->PS_Val = temp_PS_Val;
-		BCptr->numPS = verlink->count_dem_index;
-	}
+		BCptr->numPS = coupled_source_end;
 	}
 
 	if (swmm_coupled)
 	{
 		Node_Inflow = (double*)calloc(Nobjects[NODE], sizeof(double));
 	}
+	SwmmCoupleClock couple_clock;
+	swmm_couple_clock_init(&couple_clock,
+		!swmm_coupled || Parptr->swmm_couple_every_step,
+		(double)Parptr->swmm_coupleint,
+		swmm_coupled ? verlink->count_index : 0);
 	//--------------------------------------------------------------------
 
 	time_t loop_start;
@@ -597,13 +594,25 @@ void fv1::solve
 		// Freeze one common coupling step for exchange limiting, FV1 and SWMM.
 		const NUMERIC_TYPE remaining_2d = Solverptr->Sim_Time - Solverptr->t;
 		Solverptr->Tstep = getmin(Solverptr->Tstep, remaining_2d);
-		if (swmm_coupled)
+		Solverptr->Tstep = rain.clip_step(Solverptr->t, Solverptr->Tstep);
+		if (swmm_coupled && couple_clock.every_step)
 		{
 			const NUMERIC_TYPE remaining_swmm = static_cast<NUMERIC_TYPE>(
 					(TotalDuration - NewRoutingTime) / 1000.0);
 			Solverptr->Tstep = getmin(Solverptr->Tstep, remaining_swmm);
 		}
+		else if (swmm_coupled)
+		{
+			Solverptr->Tstep = (NUMERIC_TYPE)swmm_couple_clip_dt(&couple_clock,
+				Solverptr->t, Solverptr->Tstep, Solverptr->Sim_Time,
+				TotalDuration / 1000.0);
+		}
 		if (Solverptr->Tstep <= C(0.0)) break;
+
+		zero_flux_stats(BCptr);
+		// Apply net rain/infiltration before computing the
+		// inlet exchange, so both sinks cannot spend the same surface water.
+		rain.update_H(Parptr, Solverptr, Arrptr);
 
 		if (swmm_coupled)
 		{
@@ -613,29 +622,57 @@ void fv1::solve
 		memset(verlink->flow_2D_node, 0, verlink->count_index * sizeof(double));
 		memset(Node_Inflow, 0, Nobjects[NODE] * sizeof(double));
 
-		floodfv1::verticalcon::cal_exchange_flow(verlink, Arrptr, Parptr, Solverptr);
-		floodfv1::verticalcon::nodeinflow_cal(verlink);
-
-		if (temp_numPS > 0)
-		{
-			for (size_t flowindex = 0; flowindex < verlink->count_dem_index; flowindex++)
-			{
-				BCptr->PS_Val[temp_numPS + flowindex] = verlink->flow_2D_dem[verlink->dem_Vindex_uni[flowindex]];
-			}
-		}
+		floodfv1::verticalcon::cal_exchange_flow(verlink, Arrptr, Parptr,
+			Solverptr, couple_clock.volume);
+		if (couple_clock.every_step)
+			floodfv1::verticalcon::nodeinflow_cal(verlink);
 		else
+			swmm_couple_accumulate(&couple_clock, verlink,
+				(double)Solverptr->Tstep);
+
+		for (int source = 0; source < verlink->count_dem_index; ++source)
+			BCptr->PS_Val[surface_source_start + source] =
+				verlink->flow_2D_dem[verlink->dem_Vindex_uni[source]];
+		for (int source = 0; source < verlink->outfall_dem_count; ++source)
+			BCptr->PS_Val[outfall_source_start + source] = C(0.0);
+		}
+
+		update_point_sources(Parptr, Solverptr, BCptr, Arrptr, 0,
+			swmm_coupled ? outfall_source_start : BCptr->numPS,
+			surface_source_start);
+
+		int swmm_error = 0;
+		if (swmm_coupled)
 		{
-			for (size_t flowindex = 0; flowindex < verlink->count_dem_index; flowindex++)
+			const int exchange_now = swmm_couple_due(&couple_clock,
+				Solverptr->t + Solverptr->Tstep, Solverptr->Sim_Time,
+				TotalDuration / 1000.0);
+			if (exchange_now)
 			{
-				BCptr->PS_Val[flowindex] = verlink->flow_2D_dem[verlink->dem_Vindex_uni[flowindex]];
+				if (couple_clock.every_step) linkDt = Solverptr->Tstep;
+				else
+				{
+					swmm_couple_write_inflow(&couple_clock, verlink);
+					linkDt = couple_clock.elapsed;
+				}
+				swmm_beginCoupledExchange();
+				lis::cpu_coupling::update_outfall_stages(verlink, Parptr, Arrptr);
+				swmm_error = swmm_advanceCoupled((double)linkDt, &elapsedTime);
+				if (!swmm_error)
+				{
+					lis::cpu_coupling::collect_return_sources(verlink, BCptr,
+						Parptr, Arrptr, surface_source_start,
+						outfall_source_start, (double)linkDt,
+						(double)Solverptr->Tstep);
+					update_point_sources(Parptr, Solverptr, BCptr, Arrptr,
+						surface_source_start, coupled_source_end,
+						surface_source_start);
+				}
+				if (!couple_clock.every_step)
+					swmm_couple_advance(&couple_clock);
 			}
 		}
-		}
 
-		zero_flux_stats(BCptr);
-
-        rain.update_H(Parptr, Solverptr, Arrptr);
-		update_point_sources(Parptr, Solverptr, BCptr, Arrptr, temp_numPS);
 		apply_friction(Parptr, Solverptr, Arrptr);
 		update_Hstar(Parptr, Arrptr);
 		update_fluxes(Parptr, Solverptr, Arrptr);
@@ -646,13 +683,6 @@ void fv1::solve
 		accumulate_boundary_flux_stats(Parptr, Solverptr, BCptr, Arrptr);
 
 		Solverptr->MinTstep = getmin(Solverptr->MinTstep, Solverptr->Tstep);
-		int swmm_error = 0;
-		if (swmm_coupled)
-		{
-			linkDt = Solverptr->Tstep;
-			swmm_error = swmm_step(&elapsedTime);
-		}
-
 		Solverptr->t += Solverptr->Tstep;
 		Solverptr->itCount += 1;
 		if (swmm_error != 0) break;
@@ -704,11 +734,18 @@ void fv1::solve
 
 		// --- close the system
 		swmm_close();
+		free(Node_Inflow);
+		Node_Inflow = nullptr;
 	}
+	swmm_couple_clock_free(&couple_clock);
 
     write_max_field(Fnameptr, Statesptr, Parptr, Arrptr);
 
-	if (swmm_coupled) floodfv1::verticalcon::free_vcon(verlink);
+	if (swmm_coupled)
+	{
+		lis::cpu_coupling::free_outfalls(verlink);
+		floodfv1::verticalcon::free_vcon(verlink);
+	}
 	if (verbose == ON) printf("Finished.\n\n");
 	return;
 }
@@ -802,10 +839,12 @@ void fv1::update_point_sources
 	Solver *Solverptr,
 	BoundCs *BCptr,
 	Arrays *Arrptr,
+	const int source_start,
+	const int source_end,
 	const int coupling_start_index
 )
 {
-	for (int ps_i = 0; ps_i < BCptr->numPS; ps_i++)
+	for (int ps_i = source_start; ps_i < source_end; ps_i++)
 	{
 		const int i = BCptr->xpi[ps_i];
 		const int j = BCptr->ypi[ps_i];
@@ -841,6 +880,7 @@ void fv1::update_point_sources
 				NUMERIC_TYPE H_old = H;
 				NUMERIC_TYPE H_new = H_old
 					+ Q * Parptr->dx * Solverptr->Tstep / Parptr->dA;
+				NUMERIC_TYPE actual_Q = Q * Parptr->dx;
 
 				// Coupled surface-to-sewer flow removes the horizontal momentum
 				// carried by the drained water. Sewer-to-surface overflow is
@@ -849,6 +889,8 @@ void fv1::update_point_sources
 				{
 					const int cell_i = j*Parptr->xsz + i;
 					H_new = FMAX(C(0.0), H_new);
+					actual_Q = (H_new - H_old) * Parptr->dA /
+						Solverptr->Tstep;
 
 					if (H_old > C(0.0))
 					{
@@ -865,7 +907,7 @@ void fv1::update_point_sources
 
 				H = H_new;
 
-				accumulate_point_flux_stats(BCptr, Q*Parptr->dx);
+				accumulate_point_flux_stats(BCptr, actual_Q);
 			}
 			break;
 		case QVAR5:

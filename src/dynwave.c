@@ -285,7 +285,7 @@ int dynwave_execute(double tStep)
     initRoutingStep();
 
     // --- keep iterating until convergence
-    // V10: the volume equation is solved inside each trial. Extra trials only
+    // The volume equation is solved inside each trial. Extra trials only
     // tighten the momentum-depth fixed point. The project HEAD_TOLERANCE and
     // MAX_TRIALS already define that tolerance; forcing 160 trials and a
     // 1e-10 ft residual does not change the accepted volume balance.
@@ -679,7 +679,7 @@ int findNodeDepths(double dt)
     }
     for (i=0;i<Nobjects[NODE];++i) {
         if (!isfinite(Node[i].newDepth) || !isfinite(Node[i].inflow) || !isfinite(Node[i].outflow)) {
-            fprintf(stderr,"V11 SWMM nonfinite state node=%s time_s=%.9g dt_s=%.9g\n",Node[i].ID,NewRoutingTime/1000.0,dt);
+            fprintf(stderr,"SWMM nonfinite state node=%s time_s=%.9g dt_s=%.9g\n",Node[i].ID,NewRoutingTime/1000.0,dt);
             ErrorCode=ERR_TIMESTEP; return FALSE;
         }
     }

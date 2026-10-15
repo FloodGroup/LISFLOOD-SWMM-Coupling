@@ -1,6 +1,6 @@
 # Example 02: synthetic coupled case
 
-A minimal coupled case for checking that a build reads and maps all coupling inputs. It is synthetic, not a calibrated study site.
+A minimal coupled case for checking that a build reads and maps all coupling inputs, on the CPU or on the GPU. It is synthetic, not a calibrated study site.
 
 ```text
      100 m × 100 m flat DEM, 10 m cells, z = 10 m
@@ -13,7 +13,7 @@ A minimal coupled case for checking that a build reads and maps all coupling inp
 
 | File | Role |
 |---|---|
-| `case.par` | LISFLOOD-FP parameters (`cuda`, `acceleration`) and coupling keywords |
+| `case.par` | LISFLOOD-FP parameters (`acceleration`) and coupling keywords |
 | `dem.asc` | 10 × 10 flat DEM, elevation 10 m |
 | `start.asc` | initial depth, 0 everywhere |
 | `network.inp` | SWMM network: junction `J1`, `COUPLED` outfall `OF1`, conduit `C1`, `DYNWAVE` routing |
@@ -22,16 +22,23 @@ A minimal coupled case for checking that a build reads and maps all coupling inp
 
 ## Run
 
-Requires a CUDA build and an NVIDIA GPU, because coupled runs use the CUDA solvers.
-
 ```bash
 lisflood case.par
 ```
 
-To try the FV1 solver, replace `acceleration` with `fv1` in `case.par`. To exchange at a fixed interval, set `coupleint` to a number of seconds (for example `coupleint 5`).
+As shipped, the case runs on the CPU and needs no GPU. The same case covers all four coupled drivers:
+
+| Driver | Change to `case.par` |
+|---|---|
+| CPU ACC | none |
+| CPU FV1 | replace `acceleration` with `fv1` |
+| CUDA ACC | add a line `cuda` (needs a CUDA build and an NVIDIA GPU) |
+| CUDA FV1 | add `cuda` and replace `acceleration` with `fv1` |
+
+To exchange at a fixed interval instead of every step, set `coupleint` to a number of seconds (for example `coupleint 5`).
 
 ## Inspect
 
-- `flood_error.txt` has no `out of DEM range` line for `J1`, and has one `V8 COUPLED tailwater: OF1 -> DEM index …` line.
-- `results/syn.water_balance.csv` lists every exchange term over time; `combined_balance_residual_m3` should stay near zero.
-- `network.rpt` is the standard SWMM report.
+- `flood_error.txt` has no `out of DEM range` or `wrong node type` line for `J1`, and maps `OF1` to DEM index 55 (`outfall:OF1 cell=55 coupled_stage=1` on the CPU, `COUPLED tailwater: OF1 -> DEM index 55` on the GPU).
+- `network.rpt` is the standard SWMM report; its continuity errors should be near zero.
+- On the GPU, `results/syn.water_balance.csv` lists every exchange term over time, and `combined_balance_residual_m3` should stay near zero.

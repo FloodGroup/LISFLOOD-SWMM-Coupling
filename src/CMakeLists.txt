@@ -6,10 +6,6 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 endif()
 
 project(lisflood-fp)
-if(NOT DEFINED V11_SOURCE_ID)
-  set(V11_SOURCE_ID "untracked-source-build")
-endif()
-set_source_files_properties(lisflood.cpp PROPERTIES COMPILE_DEFINITIONS "LISFLOOD_BUILD_ID=\"${V11_SOURCE_ID}\"")
 
 set(_CONFIG config.default.cmake CACHE FILEPATH "CMake config file")
 include(${_CONFIG})
@@ -29,6 +25,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 add_library(lisflood-base INTERFACE)
 target_sources(lisflood-base INTERFACE
 		coupled_boundary.c
+		cpu_coupling.cpp
 		climate.c
 		controls.c
 		culvert.c

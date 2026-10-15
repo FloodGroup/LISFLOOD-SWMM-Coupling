@@ -61,7 +61,7 @@ lis::cuda::DynamicRain::update
 			NUMERIC_TYPE rain_rate = rate_at_cell(rain_data, i, j);
 			if (!isfinite(rain_rate) || !isfinite(Hval)) {
 				if (atomicAdd(&mass_stats->invalid_count,1U)==0)
-					printf("V11 ERROR rain/water nonfinite at valid FV1 cell x=%d y=%d H=%g rate=%g; check rain frame log\n",i,j,(double)Hval,(double)rain_rate);
+					printf("ERROR rain/water nonfinite at valid FV1 cell x=%d y=%d H=%g rate=%g; check rain frame log\n",i,j,(double)Hval,(double)rain_rate);
 				asm("trap;");
 			}
 			NUMERIC_TYPE H_old = FMAX(Hval, C(0.0));
@@ -144,7 +144,7 @@ lis::cuda::DynamicRain::updateACC
 			NUMERIC_TYPE rain_rate = rate_at_cell_ACC(rain_data, i, j);
 			if (!isfinite(rain_rate) || !isfinite(Hval)) {
 				if (atomicAdd(&mass_stats->invalid_count,1U)==0)
-					printf("V11 ERROR rain/water nonfinite at valid ACC cell x=%d y=%d H=%g rate=%g; check rain frame log\n",i,j,(double)Hval,(double)rain_rate);
+					printf("ERROR rain/water nonfinite at valid ACC cell x=%d y=%d H=%g rate=%g; check rain frame log\n",i,j,(double)Hval,(double)rain_rate);
 				asm("trap;");
 			}
 			NUMERIC_TYPE H_old = FMAX(Hval, C(0.0));

@@ -35,7 +35,7 @@ void lis::cuda::acc::Simulation::run
 	int verbose
 )
 {
-	print_device_info(); // Device identity belongs in every V11 run log.
+	print_device_info();
 	dim3 grid_size(128, 128);
 
 	Geometry geometry; 
@@ -175,7 +175,7 @@ void lis::cuda::acc::Simulation::run
 	{
 		Node_Inflow = (double*)calloc(Nobjects[NODE], sizeof(double));
 	}
-	// V9 uses compact gathered depths; no domain-sized host staging raster.
+	// Compact gathered depths; no domain-sized host staging raster.
 
 
 	//--------------------------------------------------------------------
@@ -243,7 +243,7 @@ void lis::cuda::acc::Simulation::run
 
 	Flow& d_U = solve->d_U(); 
 	stats_collector.initialise_volume(d_U.H);
-	V11RunAudit audit(filenames.resrootname,"CUDA_ACC",swmm_coupled,stats_collector.previous_volume,solver.Sim_Time);
+	RunAudit audit(filenames.resrootname,"CUDA_ACC",swmm_coupled,stats_collector.previous_volume,solver.Sim_Time);
 
 	//--------------------------------------------------------------------------------------
 	
@@ -467,7 +467,7 @@ void lis::cuda::acc::Simulation::run
 			if (cuda::dt <= C(0.0)) break;
 		}
 
-		// V11: actual net rain/infiltration is applied before the inlet budget.
+		// Net rain/infiltration is applied before the inlet budget.
 		stats_collector.zero_instantaneous_mass();
 		if (rain.enabled()) {
 			rain.update_time(solver.t);
@@ -609,7 +609,7 @@ void lis::cuda::acc::Simulation::run
 					cudaError_t copy_status = cudaMemcpy(temp_BC.PS_value + temp_numPS_acc,
 							temp_psvalue + temp_numPS_acc,
 							coupling_count * sizeof(NUMERIC_TYPE),cudaMemcpyHostToDevice);
-					if (copy_status != cudaSuccess) { fprintf(stderr,"V9: source copy failed: %s\n",cudaGetErrorString(copy_status)); exit(EXIT_FAILURE); }
+					if (copy_status != cudaSuccess) { fprintf(stderr,"source copy failed: %s\n",cudaGetErrorString(copy_status)); exit(EXIT_FAILURE); }
 					cuda::Boundary::update_point_sources_range(
 							d_U.H, nullptr, nullptr, d_DEM,
 							stats_collector.instantaneous_mass(),

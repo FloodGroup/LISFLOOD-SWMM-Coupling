@@ -528,7 +528,7 @@ typedef struct
    int        type;               // outfall type code
    char       hasFlapGate;        // true if contains flap gate
    double     fixedStage;         // fixed outfall stage (ft)
-   double     externalStage;      // V8 coupled receiving-water elevation (ft)
+   double     externalStage;      // coupled receiving-water elevation (ft)
    char       externalStageActive; // override only for COUPLED outfalls
    int        tideCurve;          // index of tidal stage curve
    int        stageSeries;        // index of outfall stage time series

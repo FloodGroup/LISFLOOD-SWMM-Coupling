@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="736" viewBox="0 0 1200 736" font-family="Arial, Helvetica, 'Liberation Sans', sans-serif">
   <defs>
     <linearGradient id="soil" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#EEE8DD"/><stop offset="1" stop-color="#E2D8C6"/>
@@ -22,7 +22,7 @@
     </g>
   </defs>
 
-  <rect width="1200" height="600" fill="#ffffff"/>
+  <rect width="1200" height="736" fill="#ffffff"/>
 
   <!-- ================= (a) surcharge ================= -->
   <g transform="translate(30,30)">
@@ -110,5 +110,13 @@
       <text x="28" y="478">(b), (c) capped by Q<tspan baseline-shift="sub" font-size="10.5">in,max</tspan> and by the</text>
       <text x="28" y="500">cell water h &#916;x &#916;y / (n &#916;t), n inlets</text>
     </g>
+  </g>
+  <!-- ================= symbol key ================= -->
+  <rect x="30.5" y="588.5" width="1139" height="128" rx="10" fill="#ffffff" stroke="#D4D4D4"/>
+  <g font-size="14.5" fill="#555555">
+    <text x="50" y="618"><tspan font-weight="700" fill="#222222">Z</tspan> crest = max(z<tspan baseline-shift="sub" font-size="10.5">rim</tspan>, z<tspan baseline-shift="sub" font-size="10.5">DEM</tspan>) <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#2A5E51">H<tspan baseline-shift="sub" font-size="10.5">1D</tspan></tspan> SWMM node head, invert + depth <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#2C5577">H<tspan baseline-shift="sub" font-size="10.5">2D</tspan></tspan> cell water level, DEM + h <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#222222">&#949;</tspan> = 10<tspan baseline-shift="super" font-size="10.5">&#8722;3</tspan> m numerical tolerance, not a loss term</text>
+    <text x="50" y="646"><tspan font-weight="700" fill="#222222">C<tspan baseline-shift="sub" font-size="10.5">0</tspan>, A<tspan baseline-shift="sub" font-size="10.5">0</tspan></tspan> surcharge orifice (floodconfig cols 3, 4) <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#222222">C<tspan baseline-shift="sub" font-size="10.5">w</tspan>, w</tspan> weir coefficient and crest length (cols 6, 7) <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#222222">C<tspan baseline-shift="sub" font-size="10.5">1</tspan>, A<tspan baseline-shift="sub" font-size="10.5">1</tspan></tspan> inflow orifice (cols 9, 10) <tspan fill="#AAAAAA">&#160;&#183;&#160;</tspan> <tspan font-weight="700" fill="#222222">Q<tspan baseline-shift="sub" font-size="10.5">out,max</tspan>, Q<tspan baseline-shift="sub" font-size="10.5">in,max</tspan></tspan> cols 5, 8</text>
+    <text x="50" y="674"><tspan font-weight="700" fill="#B4643A">Q &#8805; 0</tspan> along the arrow in each panel. In the code, flow_2D_node &gt; 0 is sewer &#8594; surface and flow_1D_node &gt; 0 is surface &#8594; sewer; the surface receives q = Q / &#916;y.</text>
+    <text x="50" y="702" fill="#777777">Same branches and limits on the CPU (verticalcon::cal_exchange_flow) and the GPU (Topography::cal_flow_exchange).</text>
   </g>
 </svg>

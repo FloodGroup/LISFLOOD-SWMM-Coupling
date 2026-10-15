@@ -1,6 +1,6 @@
 # Coupling methodology
 
-This document explains how LISFLOOD-FP and SWMM exchange water in this repository. Each equation is followed by the function that implements it, so the text can be checked against the source.
+This document explains how LISFLOOD-FP and SWMM exchange water in this repository. The same exchange is implemented for the CPU solvers and for the CUDA (GPU) solvers; each equation is followed by the functions that implement it on both, so the text can be checked against the source.
 
 **Contents**
 
@@ -22,9 +22,10 @@ This document explains how LISFLOOD-FP and SWMM exchange water in this repositor
 ## 1. Design principles
 
 - **Keep both physics engines.** LISFLOOD-FP still solves the 2-D shallow-water equations and SWMM still solves the 1-D dynamic-wave equations. The coupling layer only adds exchange terms and, in network components that contain a `COUPLED` outfall, replaces SWMM's continuity update with a volume-based one.
+- **One exchange law on every back end.** The manhole law, the inflow limits, the exchange clock and the SWMM side are shared by the CPU and CUDA builds. Switching between `acceleration` and `fv1`, or adding `cuda` to the parameter file, changes the 2-D solver but not the coupling.
 - **Exchange volumes, not instantaneous rates.** SWMM is advanced across the whole exchange interval with its own sub-steps, and the volume that actually crossed each interface is returned to the surface (`swmm_advanceCoupled` in `swmm5.c`).
 - **Never withdraw water that is not there.** Every withdrawal is capped by the water available in the donor: the 2-D cell for inlet drainage, the sewer storage for surcharge, and the receiving cell or junction for outfall exchange.
-- **Move as little data as possible.** Only the depths of coupled cells are copied from the GPU to the host each step (`gather_coupling_depths`).
+- **Move as little data as possible on the GPU.** Only the depths of coupled cells are copied from the device to the host each step (`gather_coupling_depths`). The CPU solvers read the depth array directly.
 
 ## 2. Architecture
 
@@ -32,7 +33,7 @@ This document explains how LISFLOOD-FP and SWMM exchange water in this repositor
   <img src="figures/layers.svg" width="100%" alt="Architecture of the coupled model">
 </p>
 
-The coupled executable has three layers. LISFLOOD-FP owns the surface grid and the main time loop. The coupling layer (new in this repository) owns the exchange clock, the depth gather, the manhole discharge law and the receiving-cell bookkeeping. SWMM owns the sewer network and exposes a small coupling API.
+The coupled executable has three layers. LISFLOOD-FP owns the surface grid and the main time loop, on the CPU or on the GPU. The coupling layer owns the exchange clock, the node and outfall mapping, the manhole discharge law and the receiving-cell bookkeeping. SWMM owns the sewer network and exposes a small coupling API.
 
 | SWMM API (`swmm5.h`) | Purpose |
 |---|---|
@@ -43,43 +44,53 @@ The coupled executable has three layers. LISFLOOD-FP owns the surface grid and t
 | `swmm_getNodeFloodExchangeVolume(node)` | node flooding volume during the interval (m³) |
 | `swmm_getNodeAvailableCoupledVolume(node)` | water stored at a node, used to cap surcharge (m³) |
 
+The 2-D side of the coupling has one implementation per back end:
+
+| Task | CPU | CUDA |
+|---|---|---|
+| Node mapping and manhole law | `flood::verticalcon` (`iterateq.cpp`, ACC), `floodfv1::verticalcon` (`swe/fv1.cpp`, FV1) | `lis::cuda::Topography` (`cuda/cuda_dem.cu`) |
+| Outfall mapping, outfall stages, returned volumes | `lis::cpu_coupling` (`cpu_coupling.cpp`) | `lis::cuda::Topography` (`cuda/cuda_dem.cu`) |
+| Main loop | `IterateQ` (`iterateq.cpp`), `fv1::solve` (`swe/fv1.cpp`) | `cuda/acc/cuda_acc_simulate.cu`, `cuda/fv1/cuda_fv1_simulate.cu` |
+
 ## 3. One coupling cycle
 
 <p align="center">
   <img src="figures/exchange_cycle.svg" width="100%" alt="Nine-step coupling cycle across three swim lanes">
 </p>
 
-The cycle runs inside the main loop of `cuda/acc/cuda_acc_simulate.cu` (the FV1 driver `cuda/fv1/cuda_fv1_simulate.cu` follows the same structure).
+All four drivers (CPU ACC, CPU FV1, CUDA ACC, CUDA FV1) run the same cycle:
 
-| Step | What happens | Code |
-|:---:|---|---|
-| 1 | The 2-D step `dt` is set by the CFL condition and rainfall clipping. In interval mode it is also shortened so the exchange time lands exactly on the interval boundary. | `update_dt_ACC`, `swmm_couple_clip_dt` |
-| 2 | Water depths in the coupled cells are gathered into a compact GPU buffer and copied to the host. | `gather_coupling_depths` |
-| 3 | The discharge through every manhole is computed from the SWMM node head and the surface water level ([§5](#5-manhole-exchange)). | `Topography::cal_flow_exchange` |
-| 4 | The discharges are written as point sources, and the 2-D fluxes and depths are updated. | `FloodplainQ`, `Boundary::update_H` |
-| 5 | Inlet volumes are accumulated: \(V_i \mathrel{+}= Q_i\,dt\). | `swmm_couple_accumulate` |
-| — | If the interval is not complete, the loop continues with the next 2-D step. | `swmm_couple_due` |
-| 6 | The accumulated volume is converted to a constant inflow rate `Node_Inflow = V / T`, and each `COUPLED` outfall receives the bed, depth and area of its cell. | `swmm_couple_write_inflow`, `update_outfall_stages` |
-| 7 | SWMM routes the network forward by `T`. Inside every dynamic-wave sub-step the coupled components use the volume-based update of [§6](#6-coupled-outfalls). | `swmm_advanceCoupled` |
-| 8 | Exchanged volumes at outfalls and flooded nodes are read back and converted to point-source fluxes. | `collect_outfall_source_values`, `collect_surface_flood_values` |
-| 9 | The sources are added to the surface depths and the clocks are reset. | `update_point_sources_range`, `swmm_couple_advance` |
+| Step | What happens | CPU | CUDA |
+|:---:|---|---|---|
+| 1 | The 2-D step `dt` is set by the CFL condition and rainfall clipping. In interval mode it is also shortened so the exchange time lands exactly on the interval boundary; in step mode it may not pass the end of the SWMM run. | `FloodplainQ` (ACC), `Tstep_from_cfl` (FV1), `clip_step`, `swmm_couple_clip_dt` | `update_dt_ACC`, `clip_step`, `swmm_couple_clip_dt` |
+| 2 | Net rainfall and infiltration are applied, then the depths of the coupled cells are read. | `DynamicRain::update_H`; depths read from the host array | `DynamicRain::updateACC` (ACC), `DynamicRain::update` (FV1); `gather_coupling_depths` copies the coupled depths to the host |
+| 3 | The discharge through every manhole is computed from the SWMM node head and the surface water level ([§5](#5-manhole-exchange)). | `verticalcon::cal_exchange_flow` | `Topography::cal_flow_exchange` |
+| 4 | The manhole discharges become point sources on the surface. | `apply_coupled_sources` (ACC), `update_point_sources` (FV1) | `Boundary::update_H` |
+| 5 | Inlet volumes are accumulated: \(V_i \mathrel{+}= Q_i\,dt\). | `swmm_couple_accumulate` | `swmm_couple_accumulate` |
+| — | If the interval is not complete, the loop continues with the next 2-D step. | `swmm_couple_due` | `swmm_couple_due` |
+| 6 | The accumulated volume is passed to SWMM as a constant inflow rate `Node_Inflow = V / T`, and each `COUPLED` outfall receives the bed, depth and area of its cell. | `swmm_couple_write_inflow`, `cpu_coupling::update_outfall_stages` | `swmm_couple_write_inflow`, `Topography::update_outfall_stages` |
+| 7 | SWMM routes the network forward by `T`. Inside every dynamic-wave sub-step the coupled components use the volume-based update of [§6](#6-coupled-outfalls). | `swmm_advanceCoupled` | `swmm_advanceCoupled` |
+| 8 | Exchanged volumes at outfalls and flooded nodes are read back and converted to point-source fluxes. | `cpu_coupling::collect_return_sources` | `collect_outfall_source_values`, `collect_surface_flood_values` |
+| 9 | The returned sources are added to the surface depths and the exchange clock is reset. | `apply_coupled_sources` (ACC), `update_point_sources` (FV1), `swmm_couple_advance` | `update_point_sources_range`, `swmm_couple_advance` |
 
-With `coupleint step`, steps 5 and 6 collapse: the inflow of the current step is passed directly and `T` equals `dt`.
+With `coupleint step`, steps 5 and 6 collapse: the inflow of the current step is passed directly (`nodeinflow_cal`) and `T` equals `dt`.
+
+**Order within a step.** Rainfall and infiltration are applied before the manhole discharge is computed, so the two sinks cannot both remove the same surface water. The CPU drivers then apply the inlet sources to the depths directly, before the flux divergence; the CUDA drivers apply them together with the flux divergence in `Boundary::update_H`. Both give the same volume per step.
 
 ## 4. Linking SWMM nodes to 2-D cells
 
-Manholes are listed explicitly in the `floodconfig` table ([user guide §4](user_guide.md#4-the-floodconfig-table)). Outfalls are found automatically from the SWMM input.
+Manholes are listed explicitly in the `floodconfig` table ([user guide §4](user_guide.md#4-the-floodconfig-table)). Outfalls are found automatically from the SWMM input. The rules below are identical on the CPU and the GPU.
 
-**Manholes.** For each row of `floodconfig`, the node's SWMM coordinates are converted to a DEM cell (`cal_demindex` in `cuda_dem.cu`):
+**Manholes.** For each row of `floodconfig`, the node's SWMM coordinates are converted to a DEM cell (`cal_dem_index` on the CPU, `cal_demindex` on the GPU):
 
 $$
 i_x = \left\lfloor \frac{x - x_{\min}}{\Delta x} \right\rfloor, \qquad
 i_y = \left\lfloor \frac{y_{\max} - y}{\Delta y} \right\rfloor
 $$
 
-A node is excluded from exchange (index `-9999`) when it lies outside the DEM, falls on a NoData cell, or is an `OUTFALL`, `STORAGE` or `DIVIDER` node. The rim elevation \(z_{\text{rim}} = z_{\text{invert}} + d_{\text{full}}\) is compared with the DEM, and differences above 0.1 m are reported (`fix_maxdepth`). When several manholes share one cell, they are grouped so the cell's water is shared fairly (`cal_demcount`).
+A node is excluded from exchange (index `-9999`) when it lies outside the DEM, falls on a NoData cell, or is an `OUTFALL`, `STORAGE` or `DIVIDER` node. The rim elevation \(z_{\text{rim}} = z_{\text{invert}} + d_{\text{full}}\) is compared with the DEM, and differences above 0.1 m are reported (`check_nodedepth`, `fix_maxdepth`). When several manholes share one cell, they are grouped so the cell's water is shared fairly (`demcountuni_cal`, `cal_demcount`).
 
-**Outfalls.** Every SWMM outfall whose coordinates fall inside the DEM is mapped to a cell (`map_internal_outfalls`). Outfalls outside the DEM remain ordinary external sinks. A `COUPLED` outfall that cannot be mapped stops the run.
+**Outfalls.** Every SWMM outfall whose coordinates fall inside the DEM, on a valid cell, is mapped to that cell (`map_internal_outfalls`). Outfalls outside the DEM remain ordinary external sinks. A `COUPLED` outfall that cannot be mapped stops the run.
 
 All mapping decisions are written to the file named by the `flooderror` keyword.
 
@@ -89,7 +100,7 @@ All mapping decisions are written to the file named by the `flooderror` keyword.
   <img src="figures/manhole_exchange.svg" width="100%" alt="Three manhole regimes: surcharge, free inflow, submerged inflow">
 </p>
 
-Three heads are compared at every coupled manhole (`Topography::cal_flow_exchange`, `cuda_dem.cu`):
+Three heads are compared at every coupled manhole (`verticalcon::cal_exchange_flow` in `iterateq.cpp` and `swe/fv1.cpp`; `Topography::cal_flow_exchange` in `cuda_dem.cu`):
 
 | Symbol | Definition |
 |---|---|
@@ -97,9 +108,9 @@ Three heads are compared at every coupled manhole (`Topography::cal_flow_exchang
 | \(H_{2D}\) | water surface in the linked cell, DEM + depth |
 | \(Z\) | crest elevation, \(\max(z_{\text{rim}},\, z_{\text{DEM}})\) |
 
-The branches are tested in order with tolerance \(\varepsilon = 10^{-3}\) m (`COUPLING_HEAD_TOL`, `consts.h`):
+The branches are tested in order with a numerical tolerance \(\varepsilon = 10^{-3}\) m (`COUPLING_HEAD_TOL`, `consts.h`), which keeps the regime from switching on round-off:
 
-**(a) Surcharge, sewer → surface**, when \(H_{1D} - Z > \varepsilon\) and \(H_{1D} - H_{2D} > \varepsilon\):
+**(a) Surcharge, sewer → surface**, when \(H_{1D} - Z > \varepsilon\) and \(H_{1D} - H_{2D} > \varepsilon\). The manhole acts as an orifice:
 
 $$
 Q = \min\!\Big( C_0 A_0 \sqrt{2g\,(H_{1D} - H_{2D})},\;\; Q_{\text{out,max}},\;\; \frac{V_{\text{stored}} + V_{\text{pending}}}{dt} \Big)
@@ -113,7 +124,7 @@ $$
 Q = C_w\, w\, (H_{2D} - Z)\sqrt{2g\,(H_{2D} - Z)}
 $$
 
-**(c) Submerged inflow, surface → sewer**, when \(H_{1D} \ge Z - \varepsilon\) and \(H_{2D} - H_{1D} > \varepsilon\):
+**(c) Submerged inflow, surface → sewer**, when \(H_{1D} \ge Z - \varepsilon\) and \(H_{2D} - H_{1D} > \varepsilon\). The crest is drowned, so the inlet acts as an orifice:
 
 $$
 Q = C_1 A_1 \sqrt{2g\,(H_{2D} - H_{1D})}
@@ -127,10 +138,7 @@ $$
 Q_{\text{in}} = \min\!\Big( Q,\;\; \frac{h\,\Delta x\,\Delta y}{n\,dt},\;\; Q_{\text{in,max}} \Big)
 $$
 
-**Sign convention.** `flow_1D_node` is positive into the sewer; `flow_2D_node` has the opposite sign. The surface receives `flow_2D_node / Δy` as a per-width point-source flux (m²/s), which is how LISFLOOD-FP stores point sources.
-
-> [!NOTE]
-> The CPU routines in `iterateq.cpp`, `swe/fv1.cpp` and `swe/dg2.cpp` contain an older version of this exchange. They are not reachable, because `lisflood.cpp` rejects coupled runs that do not use CUDA ACC or CUDA FV1. In the CPU ACC routine, branch (b) uses the orifice law instead of the weir law.
+**Sign convention.** `flow_1D_node` is positive into the sewer; `flow_2D_node` has the opposite sign, so it is positive towards the surface. The surface receives `flow_2D_node / Δy` as a per-width point-source flux (m²/s), which is how LISFLOOD-FP stores point sources.
 
 ## 6. COUPLED outfalls
 
@@ -138,7 +146,7 @@ $$
   <img src="figures/outfall_cv.svg" width="100%" alt="Longitudinal section of a COUPLED outfall and its receiving 2-D cell, with the volume equations">
 </p>
 
-A standard SWMM outfall imposes a stage, such as free outfall, normal depth or a fixed level, and its receiving water is infinite. A `COUPLED` outfall instead connects the last conduit to a finite 2-D cell, so water leaving the sewer raises that cell and a high cell pushes water back into the pipe. The implementation is in `coupled_boundary.c`.
+A standard SWMM outfall imposes a stage, such as free outfall, normal depth or a fixed level, and its receiving water is infinite. A `COUPLED` outfall instead connects the last conduit to a finite 2-D cell, so water leaving the sewer raises that cell and a high cell pushes water back into the pipe. The SWMM side is in `coupled_boundary.c` and is shared by the CPU and CUDA builds.
 
 ### 6.1 Which nodes use the volume update
 
@@ -207,7 +215,7 @@ For each dynamic-wave sub-step \(\delta t\) (hooks in `dynwave.c` and `routing.c
 
 5. **Account** (`coupled_account`). SWMM's routing totals are corrected so its own continuity report stays consistent with the backward-Euler update.
 
-After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in m³ (`coupled_exchange`) and applied to the receiving cell as a point source.
+After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in m³ (`coupled_exchange`) and applied to the receiving cell as a point source. On the CPU, `collect_return_sources` also checks that a reverse flow (cell → sewer) never takes more water than the cell holds.
 
 ### 6.5 Requirements checked at start-up
 
@@ -223,7 +231,7 @@ After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in 
 |---|---|
 | Ordinary outfall (`FREE`, `NORMAL`, `FIXED`, …) **inside** the DEM | keeps its SWMM boundary condition; its positive discharge is added to the cell as a one-way source |
 | Ordinary outfall **outside** the DEM | external sink, as in standalone SWMM |
-| SWMM node flooding (overflow above the rim) | the flooded volume is returned to the mapped 2-D cell (`collect_surface_flood_values`); a flooded node with no mapping stops the run |
+| SWMM node flooding (overflow above the rim) | the flooded volume is returned to the mapped 2-D cell (`collect_return_sources` on the CPU, `collect_surface_flood_values` on the GPU); a flooded node with no mapping stops the run |
 
 ## 8. Time synchronisation
 
@@ -231,7 +239,7 @@ After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in 
   <img src="figures/time_sync.svg" width="100%" alt="Timeline of 2-D steps, accumulated volume and SWMM sub-steps for interval and step coupling">
 </p>
 
-The exchange clock is `SwmmCoupleClock` in `swmm_couple.h`:
+The exchange clock is `SwmmCoupleClock` in `swmm_couple.h`. It is used unchanged by all four drivers:
 
 | Mode | Behaviour |
 |---|---|
@@ -245,7 +253,7 @@ In interval mode:
 - `swmm_advanceCoupled` caps each SWMM routing step so the network lands exactly on `t + T`, and fails if it does not.
 - Outfall and flooding volumes returned for the interval are applied to the surface in the step that closes the interval.
 
-A shorter interval couples the two models more tightly. A longer interval reduces the number of SWMM calls and host–device transfers.
+A shorter interval couples the two models more tightly. A longer interval reduces the number of SWMM calls and, on the GPU, the number of host–device transfers.
 
 ## 9. Units
 
@@ -261,7 +269,7 @@ DEM coordinates and SWMM `[COORDINATES]` must use the same projected coordinate 
 
 ## 10. Water-balance audit
 
-The CUDA drivers write two files next to the other outputs (`cuda/run_audit.cuh`):
+Every coupled run can be checked with the SWMM report (`swmmrpt`, continuity errors) and the LISFLOOD-FP mass file (`<resroot>.mass`). The CUDA drivers also write two audit files next to the other outputs (`cuda/run_audit.cuh`):
 
 | File | Content |
 |---|---|
@@ -272,11 +280,13 @@ Coupling entries are signed from the 2-D point of view. Inflow accumulated but n
 
 ## 11. Requirements and limitations
 
-- Coupled runs require `cuda` together with `acceleration` or `fv1`. Other solvers, including CUDA FV2 and DG2, run standalone only.
-- `coupleint` with a positive interval is validated for CUDA ACC and CUDA FV1 (`pars.cpp`).
+- Coupled runs require `acceleration` or `fv1`, on the CPU or with `cuda`. Other solvers, including FV2 and DG2, run standalone only.
+- `coupleint` accepts `step` or a positive interval for all four coupled drivers.
+- Hotstart (`hsfdt`, `hsffloodread`, …) is available for the ACC solver, on the CPU and the GPU. FV1 runs start from `startfile`.
+- The audit files of [§10](#10-water-balance-audit) are written by the CUDA drivers only.
 - A manhole exchanges with exactly one 2-D cell, the cell that contains its coordinates.
 - The `floodconfig` row index is the node's position in the SWMM input file, not its name ([user guide §4](user_guide.md#4-the-floodconfig-table)). Reordering the input file changes the mapping.
-- Hotstart files written by an uncoupled version may define pipe storage differently. Rebuild hotstarts with this version.
+- Hotstart files written by an uncoupled LISFLOOD-FP or SWMM may define pipe storage differently. Rebuild hotstarts with this model.
 
 ## 12. Source map
 
@@ -287,9 +297,11 @@ Coupling entries are signed from the 2-D point of view. Inflow accumulated but n
 | SWMM coupling API | `src/swmm5.c`, `src/swmm5.h` |
 | Hooks in SWMM routing | `src/dynwave.c`, `src/routing.c`, `src/node.c` |
 | `COUPLED` keyword | `src/text.h`, `src/enums.h`, `src/keywords.c` |
-| Node and outfall mapping, manhole discharge | `src/cuda/cuda_dem.cu` |
+| Node mapping, manhole discharge (CPU) | `src/iterateq.cpp` (ACC), `src/swe/fv1.cpp` (FV1) |
+| Outfall mapping, outfall stages, returned volumes (CPU) | `src/cpu_coupling.cpp`, `src/cpu_coupling.h` |
+| Node and outfall mapping, manhole discharge (CUDA) | `src/cuda/cuda_dem.cu` |
 | GPU depth gather | `src/cuda/cuda_coupling_gather.cuh` |
-| Point sources | `src/cuda/cuda_boundary.cu` |
-| Main loops | `src/cuda/acc/cuda_acc_simulate.cu`, `src/cuda/fv1/cuda_fv1_simulate.cu` |
-| Water-balance audit | `src/cuda/run_audit.cuh` |
+| Point sources (CUDA) | `src/cuda/cuda_boundary.cu` |
+| Main loops | `src/iterateq.cpp`, `src/swe/fv1.cpp`, `src/cuda/acc/cuda_acc_simulate.cu`, `src/cuda/fv1/cuda_fv1_simulate.cu` |
+| Water-balance audit (CUDA) | `src/cuda/run_audit.cuh` |
 | `.par` keywords and validation | `src/pars.cpp`, `src/lisflood.cpp` |
