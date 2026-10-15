@@ -1530,7 +1530,7 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 	FILE *fp;
 	char buff[800], buff2[800], buff3[800], side;
 	NUMERIC_TYPE BC_tmp;
-	int pi = -1, maxpi = 50000;  // Tokyo T01-T08 contains 22,210 unique point-boundary cells.
+	int pi = -1, maxpi = 200000;  // Tokyo T01-T08 contains 22,210 unique point-boundary cells.
 	NUMERIC_TYPE px, py;
 
 	int *new_xpi, *new_ypi;

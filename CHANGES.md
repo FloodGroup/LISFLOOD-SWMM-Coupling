@@ -1,3 +1,6 @@
+## 1.1.0
+
+- Raise the `.bci` point-boundary capacity from 50,000 to 200,000 unique cells (`maxpi` in `src/input.cpp`), so large urban cases such as Tokyo T01¨CT08 can load without hitting the previous limit.
 # Changelog
 
 ## 1.0.0 - first public release
