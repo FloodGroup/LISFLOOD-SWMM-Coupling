@@ -1,6 +1,6 @@
 <div align="center">
 
-# LISFLOOD-FP × SWMM
+# LISFLOOD-SWMM: A Two-Way Coupled Dual-Drainage Urban Flood Model
 
 **Two-way coupling of a 2-D surface flood model and a 1-D urban drainage model, on CPU or GPU**
 
@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/figures/surface.svg" width="100%" alt="Conceptual cross-section: blue surface water above a teal drainage network. Orange arrows show inlet drainage, surcharge and bidirectional exchange at a COUPLED outfall.">
+  <img src="docs/figures/surface.svg" width="100%" alt="Conceptual urban cross-section: buildings and an undulating street above a sloping sewer network. Water ponds in local street depressions and above a surcharging manhole. Short vertical arrows mark inlet drainage into one manhole and overflow from another; a two-way arrow marks exchange where the sewer outlet is submerged in the receiving water body.">
 </p>
 
 ## Overview
