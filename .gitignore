@@ -56,3 +56,7 @@ release/
 # NetCDF extras not used by the build
 src/windep/netCDF4-64/deps/
 src/windep/netCDF4-64/bin/
+
+# Local figure drafts and backups (not published)
+docs/figure_backups/
+docs/figures_v2/

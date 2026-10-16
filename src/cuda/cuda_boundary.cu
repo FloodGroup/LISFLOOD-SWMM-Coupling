@@ -35,12 +35,15 @@ __device__ NUMERIC_TYPE linear_interpolate
 	return values[time_series.count - 1];
 }
 
+// one thread per series (the previous implementation ran this loop on a single GPU thread, which is
+// serial in the number of .bdy series). Each series is interpolated exactly as before.
 __global__ void update_time_series
 (
 	NUMERIC_TYPE t
 )
 {
-	for (int i=0; i < cuda::boundaries.time_series_count; i++)
+	for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+			i < cuda::boundaries.time_series_count; i += blockDim.x * gridDim.x)
 	{
 		TimeSeries& time_series = cuda::boundaries.all_time_series[i];
 		time_series.current_value = linear_interpolate(time_series, t);
@@ -51,7 +54,9 @@ __global__ void update_time_varying_boundary_conditions()
 {
 	int global_i = blockIdx.x*blockDim.x + threadIdx.x;
 
-	for (int i=global_i; i<cuda::boundaries.BC_count; i+=blockDim.y*gridDim.x)
+	// grid stride is blockDim.x*gridDim.x (the previous implementation used blockDim.y*gridDim.x,
+	// so many threads rewrote the same entries)
+	for (int i=global_i; i<cuda::boundaries.BC_count; i+=blockDim.x*gridDim.x)
 	{
 		if (cuda::boundaries.BC_type[i] == HVAR3
 				|| cuda::boundaries.BC_type[i] == QVAR5)
@@ -66,7 +71,7 @@ __global__ void update_time_varying_point_sources()
 {
 	int global_i = blockIdx.x*blockDim.x + threadIdx.x;
 
-	for (int i=global_i; i<cuda::boundaries.PS_count; i+=blockDim.y*gridDim.x)
+	for (int i=global_i; i<cuda::boundaries.PS_count; i+=blockDim.x*gridDim.x)
 	{
 		if (cuda::boundaries.PS_type[i] == HVAR3
 				|| cuda::boundaries.PS_type[i] == QVAR5)
@@ -198,7 +203,9 @@ __global__ void update_point_sources_Q
 		case QFIX4:
 		{
 			NUMERIC_TYPE discharge = cuda::boundaries.PS_value[i]; //// like qtmp in UpdateH
-			Hvalue += discharge * cuda::dt / cuda::geometry.dx;
+			// atomic, several Q sources may share a cell (bci points, or a
+			// bci point and an inlet cell); for a single source it equals H += dH.
+			atomicAdd(&Hvalue, discharge * cuda::dt / cuda::geometry.dx);
 			record_coupling_stats(mass_stats,i,discharge*cuda::geometry.dx);
 
 			accumulate_point_source_stats(mass_stats, //// mass_stats->in is Qpoint_pos
@@ -208,7 +215,7 @@ __global__ void update_point_sources_Q
 		case QVAR5:
 		{
 			NUMERIC_TYPE discharge = cuda::boundaries.PS_value[i]; //// like qtmp in UpdateH
-			Hvalue += discharge * cuda::dt / cuda::geometry.dx;
+			atomicAdd(&Hvalue, discharge * cuda::dt / cuda::geometry.dx);
 			record_coupling_stats(mass_stats,i,discharge*cuda::geometry.dx);
 
 			accumulate_point_source_stats(mass_stats, //// mass_stats->in is Qpoint_pos
@@ -737,14 +744,31 @@ void lis::cuda::Boundary::initialise_PS
 	delete[] idx;
 }
 
+// host copies of the boundary counts, used only to size kernel launches.
+// 0 = not set (solvers that do not call set_launch_counts keep small fixed grids).
+static int launch_ts_count = 0, launch_bc_count = 0, launch_ps_count = 0;
+static int launch_blocks(int count, int fallback)
+{
+	if (count <= 0) return fallback;
+	int blocks = (count + CUDA_BLOCK_SIZE - 1) / CUDA_BLOCK_SIZE;
+	return blocks > 4096 ? 4096 : blocks;
+}
+
+void lis::cuda::Boundary::set_launch_counts(int time_series_count, int bc_count, int ps_count)
+{
+	launch_ts_count = time_series_count;
+	launch_bc_count = bc_count;
+	launch_ps_count = ps_count;
+}
+
 void lis::cuda::Boundary::update_time_series
 (
 	NUMERIC_TYPE t
 )
 {
-	cuda::update_time_series<<<1, 1>>>(t);
-	update_time_varying_boundary_conditions<<<64, CUDA_BLOCK_SIZE>>>();
-	update_time_varying_point_sources<<<1, CUDA_BLOCK_SIZE>>>();
+	cuda::update_time_series<<<launch_blocks(launch_ts_count, 64), CUDA_BLOCK_SIZE>>>(t);
+	update_time_varying_boundary_conditions<<<launch_blocks(launch_bc_count, 64), CUDA_BLOCK_SIZE>>>();
+	update_time_varying_point_sources<<<launch_blocks(launch_ps_count, 1), CUDA_BLOCK_SIZE>>>();
 }
 
 void lis::cuda::Boundary::update_point_sources
@@ -800,13 +824,13 @@ void lis::cuda::Boundary::update_H
 	int drycheck
 )
 {
-	cuda::update_point_sources_Q << <1, CUDA_BLOCK_SIZE >> > (H, mass_stats);
+	cuda::update_point_sources_Q << <launch_blocks(launch_ps_count, 1), CUDA_BLOCK_SIZE >> > (H, mass_stats);
 	if (drycheck)
 	{
 		cuda::limit_outflows << <grid_size, cuda::block_size >> > (H, Qx, Qy);
 	}
 	cuda::update_H << <grid_size, cuda::block_size >> > (H, Qx, Qy);
-	cuda::update_point_sources_H << <1, CUDA_BLOCK_SIZE >> > (H, DEM, mass_stats);
+	cuda::update_point_sources_H << <launch_blocks(launch_ps_count, 1), CUDA_BLOCK_SIZE >> > (H, DEM, mass_stats);
 }								  
 void lis::cuda::Boundary::drain_nodata_water
 (

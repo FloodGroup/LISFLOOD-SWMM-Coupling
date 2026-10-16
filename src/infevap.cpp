@@ -291,6 +291,7 @@ void FlowDirDEM(Pars *Parptr, Arrays *Arrptr, States *Statesptr, BoundCs *BCptr)
 	// Same principle as above, but now for point source boundary conditions:
 	for(pi=0;pi<BCptr->numPS;pi++)
 	{
+	  if (BCptr->PS_Ident[pi] == NONE0) continue; // disabled point (outside the DEM / superseded)
 	  p0 = BCptr->xpi[pi]+BCptr->ypi[pi]*Parptr->xsz;
 	  Arrptr->FlowDir[p0]=p0; // Set recipient cell to be source cell where boundary is present
 	}

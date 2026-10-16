@@ -9,6 +9,7 @@
 #include "headers.h"
 #include "coupled_boundary.h"
 #include <math.h>
+#include <float.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -108,7 +109,16 @@ static double cell_volume(int g, double head)
 
 static double inverse_volume(int n, int g, double v, double lo, double hi)
 {
+    /* Use the same volume equation and tolerance as the previous implementation. Changes:
+     * (1) a Newton step that does not at least halve the volume residual is
+     *     replaced by bisection of the bracket, so the bracket always shrinks
+     *     (near a conduit-offset kink of a nearly dry node the forward-difference
+     *     slope belongs to the steep side and Newton crept by ~1e-11 ft/iteration);
+     * (2) on exit the iterate with the smallest residual is returned instead of
+     *     the bracket midpoint (which could be the midpoint of the initial
+     *     bracket, i.e. several metres away from the root). */
     int i;
+    double x, best_x, best_r = HUGE_VAL, prev_r = HUGE_VAL;
     if (v <= 0.0) return lo;
     for (i = 0; i < 40; ++i)
     {
@@ -116,22 +126,23 @@ static double inverse_volume(int n, int g, double v, double lo, double hi)
         if (w >= v) break;
         hi = lo + 2.0 * (hi - lo);
     }
-    /* Start at the last Picard head; use Newton inside a safeguarded bracket.
-     * This avoids dozens of cross-section evaluations when heads are steady. */
-    {
-    double x = g < 0 ? MAX(lo,MIN(hi,Node[n].invertElev+Node[n].newDepth)) : 0.5*(lo+hi);
-    for (i = 0; i < 64; ++i)
+    x = g < 0 ? MAX(lo,MIN(hi,Node[n].invertElev+Node[n].newDepth)) : 0.5*(lo+hi);
+    best_x = x;
+    for (i = 0; i < 200; ++i)
     {
         double w = g < 0 ? node_volume(n,x) : cell_volume(g,x);
-        double eps=MAX(1.e-6,fabs(x)*1.e-7), slope, next;
-        if (fabs(w-v) <= 1.e-11+1.e-14*v) return x;
+        double r = fabs(w-v), eps=MAX(1.e-6,fabs(x)*1.e-7), slope, next;
+        if (r < best_r) { best_r = r; best_x = x; }
+        if (r <= 1.e-11+1.e-14*v) return x;
         if (w > v) hi=x; else lo=x;
+        if (hi - lo <= 4.0*DBL_EPSILON*MAX(1.0,fabs(x))) break;
         slope=((g < 0 ? node_volume(n,x+eps) : cell_volume(g,x+eps))-w)/eps;
         next = slope > 0.0 ? x-(w-v)/slope : 0.5*(lo+hi);
-        x = next > lo && next < hi ? next : 0.5*(lo+hi);
+        if (!(next > lo && next < hi) || r > 0.5*prev_r) next = 0.5*(lo+hi);
+        prev_r = r;
+        x = next;
     }
-    }
-    return 0.5 * (lo + hi);
+    return best_x;
 }
 
 int coupled_open(void)
@@ -192,8 +203,11 @@ int coupled_open(void)
             Conduit[Link[l].subIndex].barrels *
             ((Node[i].type == OUTFALL ? 0.0 : (Node[k].type == OUTFALL ? 1.0 : 0.5))*end_area(l, Node[i].invertElev+Node[i].newDepth,0) +
              (Node[k].type == OUTFALL ? 0.0 : (Node[i].type == OUTFALL ? 1.0 : 0.5))*end_area(l, Node[k].invertElev+Node[k].newDepth,1));
-        Conduit[Link[l].subIndex].a1=Conduit[Link[l].subIndex].a2=
-            Link[l].newVolume/(link_getLength(l)*Conduit[Link[l].subIndex].barrels);
+        /* Conduit.a1/a2 stay SWMM's mid-length flow areas (set by the
+         * link initialisation and by dwflow). dwflow uses a2 as the previous
+         * step's mid area in the inertial term 2*v*(aMid-aOld); replacing it
+         * by the mean of the end areas made that term non-zero in steady
+         * flow and drove an exponential growth of the conduit flow. */
     }
     FREE(parents); FREE(marks);
     return 0;
@@ -476,8 +490,7 @@ int coupled_commit(double dt)
         Link[l].newVolume = link_getLength(l)*Conduit[Link[l].subIndex].barrels*
             ((Node[n1].type == OUTFALL ? 0.0 : (Node[n2].type == OUTFALL ? 1.0 : 0.5))*end_area(l,Node[n1].invertElev+Node[n1].newDepth,0)+
              (Node[n2].type == OUTFALL ? 0.0 : (Node[n1].type == OUTFALL ? 1.0 : 0.5))*end_area(l,Node[n2].invertElev+Node[n2].newDepth,1));
-        Conduit[Link[l].subIndex].a1 = Link[l].newVolume /
-            (link_getLength(l)*Conduit[Link[l].subIndex].barrels);
+        /* keep Conduit.a1 = dwflow's mid area (see coupled_open). */
     }
     return 0;
 }

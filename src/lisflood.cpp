@@ -886,7 +886,7 @@ void printversion(int verbose)
 // printout header with program and version number
 {
   printf("***************************\n");
-  printf(" LISFLOOD-SWMM | numeric=%s | built=%s %s\n",NUMERIC_TYPE_NAME,__DATE__,__TIME__);
+  printf(" LISFLOOD-SWMM | numeric=%s | max point boundaries=%d | built=%s %s\n",NUMERIC_TYPE_NAME,LISFLOOD_MAX_POINT_BOUNDARIES,__DATE__,__TIME__);
   if (verbose == ON)
   {
 #if defined (__INTEL_COMPILER)

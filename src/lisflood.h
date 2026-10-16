@@ -441,6 +441,9 @@ inline bool swmm_coupling_enabled(const Fnames* filenames)
 
 //-------------------------------------------
 // Boundary Conditions
+// point-boundary (P/F lines of the .bci) limit and name slot length.
+#define LISFLOOD_MAX_POINT_BOUNDARIES 200000
+#define LISFLOOD_BC_NAME_LEN 80
 struct BoundCs{
 	int* xpi; //used in legacy and read in
 	int* ypi; //used in legacy and read in

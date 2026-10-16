@@ -30,7 +30,7 @@ This document explains how LISFLOOD-FP and SWMM exchange water in this repositor
 ## 2. Architecture
 
 <p align="center">
-  <img src="figures/layers.svg" width="100%" alt="Architecture of the coupled model">
+  <img src="figures/layers.svg" width="100%" alt="Architecture of the coupled model: the LISFLOOD-FP surface, the coupling layer that exchanges heads and volumes and maintains volume continuity for network components with COUPLED outfalls, and the SWMM network that solves conduit momentum.">
 </p>
 
 The coupled executable has three layers. LISFLOOD-FP owns the surface grid and the main time loop, on the CPU or on the GPU. The coupling layer owns the exchange clock, the node and outfall mapping, the manhole discharge law and the receiving-cell bookkeeping. SWMM owns the sewer network and exposes a small coupling API.
@@ -55,10 +55,10 @@ The 2-D side of the coupling has one implementation per back end:
 ## 3. One coupling cycle
 
 <p align="center">
-  <img src="figures/exchange_cycle.svg" width="100%" alt="Nine-step coupling cycle across three swim lanes">
+  <img src="figures/exchange_cycle.svg" width="100%" alt="Six-stage summary of the coupling cycle: apply net rainfall, exchange through manholes, accumulate volumes, advance SWMM when due, collect returned volumes and update the surface.">
 </p>
 
-All four drivers (CPU ACC, CPU FV1, CUDA ACC, CUDA FV1) run the same cycle:
+The figure groups the cycle into six stages. The table below expands those stages into nine implementation steps. All four drivers (CPU ACC, CPU FV1, CUDA ACC, CUDA FV1) run the same cycle:
 
 | Step | What happens | CPU | CUDA |
 |:---:|---|---|---|

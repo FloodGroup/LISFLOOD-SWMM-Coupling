@@ -1,8 +1,20 @@
 ﻿# Changelog
 
+## 1.2.0
+
+- Preserve SWMM's conduit midpoint flow-area history when accounting for coupled storage, avoiding spurious inertial forcing.
+- Safeguard the volume-to-head inversion with bisection when Newton progress stalls, and return the iterate with the smallest residual.
+- Make the non-OpenMP thread-count fallback file-local so it cannot override the surface solver's OpenMP runtime.
+- Validate point-boundary coordinates and time-series name lengths; report and disable out-of-domain points and missing time-series references. For multiple prescribed stages in one cell, keep the last entry.
+- Match boundary time series through hash tables instead of repeated full scans.
+- Store CUDA ACC boundary time-series data in contiguous device buffers, parallelise interpolation, size boundary launches to the point count, and transfer only coupling source values each step.
+- Use atomic accumulation for coincident CUDA ACC discharge sources, correct boundary-kernel strides, and release the allocated ACC boundary buffers.
+- Add a reproducible smoke-test script for wet CPU/CUDA coupling and coincident ACC boundary sources.
+- Redraw the six documentation figures with fuller labels, typeset equations and a consistent colour scheme, matching the current coupling implementation.
+
 ## 1.1.0
 
-- Raise the `.bci` point-boundary capacity from 50,000 to 200,000 unique cells (`maxpi` in `src/input.cpp`), so large urban cases such as Tokyo T01-T08 can load without hitting the previous limit.
+- Raise the `.bci` point-boundary capacity from 50,000 to 200,000 entries, so large urban cases can load without hitting the previous limit. Multiple entries may refer to the same cell.
 
 ## 1.0.0 - first public release
 

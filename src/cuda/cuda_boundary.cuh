@@ -52,6 +52,9 @@ struct Boundary
 		NUMERIC_TYPE t
 	);
 
+	// counts used to size the boundary kernel launches
+	static void set_launch_counts(int time_series_count, int bc_count, int ps_count);
+
 	static void update_point_sources
 	(
 	 	NUMERIC_TYPE* H,

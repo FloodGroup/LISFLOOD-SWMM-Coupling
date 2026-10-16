@@ -84,6 +84,18 @@ CMake links Windows builds against `src/windep/netCDF4-64/lib/netcdf.lib`, which
 
 `src/config.default.cmake` sets numeric precision and feature switches. To change them, copy the file and pass it with `-D_CONFIG=<file>`. In a CUDA build the file also adds `compute_75` code generation, so the executable runs on any GPU of compute capability 7.5 or newer, while `CMAKE_CUDA_ARCHITECTURES` adds native code for your GPU.
 
+### Short regression checks
+
+With Python 3 installed, run from the repository root after building:
+
+```bash
+python tools/test_coupling_smoke.py --exe build/src/lisflood --output build/smoke-check
+```
+
+On Windows, use the executable in `build/nmake/lisflood.exe`. Add `--cuda` to also check CUDA ACC and FV1. If runtime DLLs are in a separate folder, pass `--runtime-dir <folder>`. The output directory must not already exist.
+
+The script sets four OpenMP threads, runs a wet 60-second coupled example, checks finite nonnegative depth outputs, and checks nonzero GPU exchange and combined water balance. It also tests coincident ACC discharge sources, an out-of-domain point and a missing boundary time series against a known injected volume. Logs and `validation.json` are written under the output directory; the shipped examples are not changed. These are short regressions, not full-event validation. See the [recorded results](validation.md).
+
 ## 3. Prepare a coupled case
 
 A coupled case is a normal LISFLOOD-FP case plus a SWMM network and a manhole table:
@@ -182,6 +194,12 @@ Leaving out both `swmminp` and `floodconfig` gives a standalone LISFLOOD-FP run.
 Without `cuda`, the solver runs on the CPU with OpenMP threads. The four combinations (CPU ACC, CPU FV1, CUDA ACC, CUDA FV1) all support two-way coupling and read the same SWMM and `floodconfig` files, so a case can be moved between CPU and GPU by adding or removing one line.
 
 All other keywords (`DEMfile`, `startfile`, `sim_time`, `initial_tstep`, `massint`, `saveint`, `fpfric`, boundary and rainfall files, …) follow the LISFLOOD-FP 8.1 manual on [Zenodo](https://zenodo.org/records/6912932).
+
+### Point-boundary handling
+
+A `.bci` file may contain at most 200,000 point-boundary entries, including repeated cells. Time-series names must fit in 79 characters. Out-of-domain points and `HVAR`/`QVAR` references without a matching `.bdy` series are reported and disabled; review these warnings before accepting results. For multiple `HFIX`/`HVAR` entries in one cell, only the last entry is retained.
+
+CUDA ACC sums coincident discharge sources atomically and stores boundary time series in contiguous device buffers. These ACC-specific optimisations do not imply that CUDA FV1 uses the same allocation or source-update implementation.
 
 ### Example
 

@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/figures/surface.svg" width="100%" alt="Cross-section of a street with a 2-D surface grid above a buried SWMM sewer. Water drains into one manhole and surcharges from another; the sewer discharges through a COUPLED outfall into a river cell.">
+  <img src="docs/figures/surface.svg" width="100%" alt="Conceptual cross-section: blue surface water above a teal drainage network. Orange arrows show inlet drainage, surcharge and bidirectional exchange at a COUPLED outfall.">
 </p>
 
 ## Overview
@@ -31,7 +31,7 @@ This repository couples the 2-D hydrodynamic model [LISFLOOD-FP](https://www.bri
 - **`COUPLED` outfalls**, a new SWMM outfall type, let the sewer discharge into a river or coastal cell of the 2-D grid and take water back when that cell is higher. The receiving cell is treated as a finite volume, so the outfall cannot create or lose water.
 - **SWMM node flooding** is returned to the 2-D cell above the node instead of disappearing from the model.
 
-Both physics engines are unchanged: LISFLOOD-FP still solves the shallow-water equations, and SWMM still solves the dynamic-wave equations in its conduits. The coupling layer only decides what water crosses the interface, when, and how much.
+The model retains LISFLOOD-FP's surface-flow solvers and SWMM's conduit dynamic-wave momentum equations. In network components containing a `COUPLED` outfall, the coupling layer uses a volume-based continuity update and accounts for water crossing the surface-network interface.
 
 | | |
 |---|---|
@@ -45,7 +45,7 @@ Both physics engines are unchanged: LISFLOOD-FP still solves the shallow-water e
 ## How the coupling works
 
 <p align="center">
-  <img src="docs/figures/layers.svg" width="100%" alt="Three-column architecture: LISFLOOD-FP (CPU or CUDA) on the left, the coupling layer in the middle, SWMM on the right, with arrows for depth, point sources, Node_Inflow, receiving-cell geometry, exchange volume and stored volume.">
+  <img src="docs/figures/layers.svg" width="100%" alt="Three components: the blue LISFLOOD-FP surface model, the orange coupling layer and the green SWMM network. Surface heads, receiving-cell geometry and inlet volumes pass to SWMM; network heads, storage and integrated outfall or flooding volumes return to the coupler.">
 </p>
 
 Each 2-D time step, the coupler reads the water depth in every cell that contains a manhole, computes the manhole discharge, and adds it to the surface as a point source. The same discharge is accumulated as inflow for SWMM. When an exchange is due, SWMM advances by exactly the elapsed interval using its own sub-steps. It receives the accumulated inflow as a constant rate and the current water level of every receiving cell. SWMM then returns the volume that actually crossed each `COUPLED` outfall and each flooded node, and LISFLOOD-FP applies those volumes to the surface.

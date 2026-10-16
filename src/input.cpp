@@ -9,6 +9,8 @@ definition of each is outlined below.
 *****************************************************************************
 */
 #include "lisflood.h"
+#include <unordered_map>
+#include <string>
 #include "utility.h"
 #include "sgc.h"
 #include "lisflood2/file_tool.h"
@@ -1530,8 +1532,10 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 	FILE *fp;
 	char buff[800], buff2[800], buff3[800], side;
 	NUMERIC_TYPE BC_tmp;
-	int pi = -1, maxpi = 200000;  // Tokyo T01-T08 contains 22,210 unique point-boundary cells.
-	NUMERIC_TYPE px, py;
+	// limit LISFLOOD_MAX_POINT_BOUNDARIES (200000) point boundaries per .bci file.
+	int pi = -1, maxpi = LISFLOOD_MAX_POINT_BOUNDARIES;
+	int is_point = 0, line_no = 0;
+	NUMERIC_TYPE px = C(0.0), py = C(0.0);
 
 	int *new_xpi, *new_ypi;
 	ESourceType *new_PS_Ident;
@@ -1545,12 +1549,13 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 		BCptr->xpi[i] = BCptr->ypi[i] = -1;
 	BCptr->PS_Ident = new ESourceType[maxpi];
 	BCptr->PS_Val = memory_allocate_numeric_legacy(maxpi);
-	BCptr->PS_Name = new char[maxpi * 80];
+	BCptr->PS_Name = new char[(size_t)maxpi * LISFLOOD_BC_NAME_LEN];
+	// clear every name slot (the previous implementation cleared only the first maxpi bytes)
+	memset(BCptr->PS_Name, 0, (size_t)maxpi * LISFLOOD_BC_NAME_LEN);
 	for (i = 0; i < maxpi; i++)
 	{
 		BCptr->PS_Ident[i] = NONE0;
 		BCptr->PS_Val[i] = C(-1.0);
-		BCptr->PS_Name[i] = '\0';
 	}
 	BCptr->numPS = -1;
 
@@ -1577,10 +1582,10 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 
 	while (!feof(fp))
 	{
-		BCi1 = BCi2 = -1; side = '\0';
+		BCi1 = BCi2 = -1; side = '\0'; is_point = 0;
 		// Read NSEW and location, and determine start/finish of BC-->(BCi1,BCi2)
-		fscanf(fp, "%s", buff);
-		if (feof(fp)) break;
+		if (fscanf(fp, "%799s", buff) != 1) break;
+		line_no++;
 		if (buff[0] == 'N')
 		{
 			fscanf(fp, "%" NUM_FMT"%" NUM_FMT"", &start, &finish);
@@ -1648,20 +1653,34 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 			pi++;
 			if (pi >= maxpi)
 			{
-				fprintf(stderr, "Too many point boundaries in .bci (maximum %d)\n", maxpi);
+				fprintf(stderr, "ERROR: too many point boundaries in %s (maximum %d point boundaries).\n", Fnameptr->bcifilename, maxpi);
+				printf("ERROR: too many point boundaries in %s (maximum %d point boundaries).\n", Fnameptr->bcifilename, maxpi);
 				exit(EXIT_FAILURE);
 			}
-			fscanf(fp, "%" NUM_FMT"%" NUM_FMT"", &px, &py);
-			BCptr->xpi[pi] = (int)((px - Parptr->blx) / Parptr->dx);
-			BCptr->ypi[pi] = (int)((Parptr->tly - py) / Parptr->dy);
+			if (fscanf(fp, "%" NUM_FMT"%" NUM_FMT"", &px, &py) != 2)
+			{
+				fprintf(stderr, "ERROR: point boundary %d (%s line %d) has no valid x y coordinates.\n", pi + 1, Fnameptr->bcifilename, line_no);
+				printf("ERROR: point boundary %d (%s line %d) has no valid x y coordinates.\n", pi + 1, Fnameptr->bcifilename, line_no);
+				exit(EXIT_FAILURE);
+			}
+			is_point = 1;
+			// floor() so that points left of / above the DEM get a negative index
+			// and are recognised as outside (the previous implementation truncated towards zero).
+			BCptr->xpi[pi] = (int)floor((px - Parptr->blx) / Parptr->dx);
+			BCptr->ypi[pi] = (int)floor((Parptr->tly - py) / Parptr->dy);
 		}
 
 		// Read free boundary condition locations
 		// load buffer until EOL
 		j = 0;
-		do{ buff2[j] = fgetc(fp); } while (buff2[j++] != '\n' && !feof(fp));
+		do{ buff2[j] = fgetc(fp); } while (buff2[j++] != '\n' && !feof(fp) && j < (int)sizeof(buff2) - 1);
 		if (j > 0)
 			buff2[j - 1] = '\0';               // Finish off string
+		if (j >= (int)sizeof(buff2) - 1 && buff2[j - 1] != '\n')
+		{
+			int c; // skip the rest of an over-long line instead of overrunning buff2
+			while ((c = fgetc(fp)) != '\n' && c != EOF) {}
+		}
 		// get buff so you know boundary type
 		BC_tmp = -1;
 		sscanf(buff2, "%s%" NUM_FMT"", buff, &BC_tmp);
@@ -1726,6 +1745,11 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 			if (verbose == ON)
 				printf("QVAR from bdy file %s on %c side start %" NUM_FMT" end %" NUM_FMT"\n",
 				buff, side, start, finish);
+			if (strlen(buff) >= LISFLOOD_BC_NAME_LEN)
+			{
+				fprintf(stderr, "ERROR: bdy name '%s' (%s line %d) is longer than %d characters.\n", buff, Fnameptr->bcifilename, line_no, LISFLOOD_BC_NAME_LEN - 1);
+				exit(EXIT_FAILURE);
+			}
 			for (i = BCi1; i <= BCi2; i++)
 			{
 				strcpy(BCptr->BC_Name + i * 80, buff);
@@ -1738,6 +1762,11 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 			sscanf(buff2, "%s%s", buff3, buff);
 			if (verbose == ON)
 				printf("HVAR from bdy file %s on %c side start %" NUM_FMT" end %" NUM_FMT"\n", buff, side, start, finish);
+			if (strlen(buff) >= LISFLOOD_BC_NAME_LEN)
+			{
+				fprintf(stderr, "ERROR: bdy name '%s' (%s line %d) is longer than %d characters.\n", buff, Fnameptr->bcifilename, line_no, LISFLOOD_BC_NAME_LEN - 1);
+				exit(EXIT_FAILURE);
+			}
 			for (i = BCi1; i <= BCi2; i++)
 			{
 				strcpy(BCptr->BC_Name + i * 80, buff);
@@ -1747,50 +1776,108 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 		// Fixed/Varying values/names for point sources
 		// Note these need to come after the boundary conditions in the code else both will get implemented! 
 		// I'm not convinced &&BCptr->xpi[pi]>-1&&pi>-1 is strict enough (JCN) 
-		else if (!STRCMPi(buff, "HFIX") && BCptr->xpi[pi] > -1 && pi > -1)
+		else if (!STRCMPi(buff, "HFIX") && is_point && pi > -1)
 		{
 			//fscanf(fp,"%" NUM_FMT"",&BC_tmp);
 			sscanf(buff2, "%s%s", buff3, buff);
-			if (verbose == ON) printf("HFIX at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
+			if (verbose == ON && pi < 20) printf("HFIX at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
 			BCptr->PS_Val[pi] = BC_tmp;
 			BCptr->PS_Ident[pi] = HFIX2;
 		}
-		else if (!STRCMPi(buff, "QFIX") && BCptr->xpi[pi] > -1 && pi > -1)
+		else if (!STRCMPi(buff, "QFIX") && is_point && pi > -1)
 		{
 			//fscanf(fp,"%" NUM_FMT"",&BC_tmp);
-			if (verbose == ON) printf("QFIX at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
+			if (verbose == ON && pi < 20) printf("QFIX at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
 			BCptr->PS_Val[pi] = BC_tmp;
 			BCptr->PS_Ident[pi] = QFIX4;
 		}
-		else if (!STRCMPi(buff, "QVAR") && BCptr->xpi[pi] > -1 && pi > -1)
+		else if (!STRCMPi(buff, "QVAR") && is_point && pi > -1)
 		{
 			//fscanf(fp,"%s",buff);
 			sscanf(buff2, "%s%s", buff3, buff);
-			if (verbose == ON)
+			if (verbose == ON && pi < 20)
 				printf("QVAR at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %s\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], buff);
-			strcpy(BCptr->PS_Name + pi * 80, buff);
+			if (strlen(buff) >= LISFLOOD_BC_NAME_LEN)
+			{
+				fprintf(stderr, "ERROR: bdy name '%s' (%s line %d) is longer than %d characters.\n", buff, Fnameptr->bcifilename, line_no, LISFLOOD_BC_NAME_LEN - 1);
+				exit(EXIT_FAILURE);
+			}
+			strcpy(BCptr->PS_Name + (size_t)pi * LISFLOOD_BC_NAME_LEN, buff);
 			BCptr->PS_Ident[pi] = QVAR5;
 		}
-		else if (!STRCMPi(buff, "HVAR") && BCptr->xpi[pi] > -1 && pi > -1)
+		else if (!STRCMPi(buff, "HVAR") && is_point && pi > -1)
 		{
 			//fscanf(fp,"%s",buff);
 			sscanf(buff2, "%s%s", buff3, buff);
-			if (verbose == ON) printf("HVAR at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %s\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], buff);
-			strcpy(BCptr->PS_Name + pi * 80, buff);
+			if (verbose == ON && pi < 20) printf("HVAR at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) %s\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], buff);
+			if (strlen(buff) >= LISFLOOD_BC_NAME_LEN)
+			{
+				fprintf(stderr, "ERROR: bdy name '%s' (%s line %d) is longer than %d characters.\n", buff, Fnameptr->bcifilename, line_no, LISFLOOD_BC_NAME_LEN - 1);
+				exit(EXIT_FAILURE);
+			}
+			strcpy(BCptr->PS_Name + (size_t)pi * LISFLOOD_BC_NAME_LEN, buff);
 			BCptr->PS_Ident[pi] = HVAR3;
 		}
-		else if (!STRCMPi(buff, "FREE") && BCptr->xpi[pi] > -1 && pi > -1 && Statesptr->SGC == ON)
+		else if (!STRCMPi(buff, "FREE") && is_point && pi > -1 && Statesptr->SGC == ON)
 		{
 			// point FREE boundary for internal SGC boundaries
-			if (verbose == ON) printf("FREE at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) with slope %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
+			if (verbose == ON && pi < 20) printf("FREE at point [%" NUM_FMT",%" NUM_FMT"] (%d,%d) with slope %" NUM_FMT"\n", px, py, BCptr->xpi[pi], BCptr->ypi[pi], BC_tmp);
 			BCptr->PS_Val[pi] = BC_tmp;
 			BCptr->PS_Ident[pi] = FREE6;
 		}
 		else
 		{
-			if (verbose == ON) printf("WARNING: Incorrect boundary condition in .bci file\n");
+			if (verbose == ON) printf("WARNING: Incorrect boundary condition in .bci file (line %d)\n", line_no);
 		}
 
+	}
+
+	if (verbose == ON && pi >= 20) printf("... %d further point boundary lines not listed.\n", pi + 1 - 20);
+
+	// check the point boundaries before the arrays are shrunk.
+	//  - a point outside the DEM is reported and disabled (the previous implementation wrote outside the
+	//    H array on the CPU and outside the device grid on the GPU);
+	//  - several HFIX/HVAR points in one cell: the CPU applies them in file order,
+	//    so the last one sets the depth. Only that last one is kept, which gives
+	//    the CPU result exactly and makes the GPU kernel (one thread per point)
+	//    deterministic. QFIX/QVAR points in one cell all add (GPU uses atomics).
+	if (pi > -1)
+	{
+		const int npts = pi + 1;
+		int n_out = 0, n_dupH = 0, n_type[8] = { 0 };
+		std::unordered_map<long long, int> lastH;
+		lastH.reserve((size_t)npts * 2);
+		for (i = 0; i < npts; i++)
+		{
+			const int xi = BCptr->xpi[i], yi = BCptr->ypi[i];
+			if (xi < 0 || xi >= Parptr->xsz || yi < 0 || yi >= Parptr->ysz)
+			{
+				if (BCptr->PS_Ident[i] != NONE0)
+				{
+					if (n_out < 10) printf("WARNING: point boundary %d (cell %d,%d) is outside the DEM (%d x %d) - ignored.\n", i + 1, xi, yi, Parptr->xsz, Parptr->ysz);
+					n_out++;
+				}
+				BCptr->PS_Ident[i] = NONE0;
+				BCptr->xpi[i] = 0; BCptr->ypi[i] = 0; // keep a valid cell index for the GPU index table
+				continue;
+			}
+			if (BCptr->PS_Ident[i] == HFIX2 || BCptr->PS_Ident[i] == HVAR3)
+			{
+				const long long cell = (long long)yi * Parptr->xsz + xi;
+				std::unordered_map<long long, int>::iterator it = lastH.find(cell);
+				if (it != lastH.end())
+				{
+					BCptr->PS_Ident[it->second] = NONE0; // superseded by the later point (CPU file order)
+					n_dupH++;
+					it->second = i;
+				}
+				else lastH[cell] = i;
+			}
+		}
+		for (i = 0; i < npts; i++) if ((int)BCptr->PS_Ident[i] >= 0 && (int)BCptr->PS_Ident[i] < 8) n_type[(int)BCptr->PS_Ident[i]]++;
+		printf("Point boundaries: %d read (limit %d); active HFIX %d, HVAR %d, QFIX %d, QVAR %d, FREE %d; outside DEM %d; superseded HFIX/HVAR in the same cell %d.\n",
+			npts, maxpi, n_type[HFIX2], n_type[HVAR3], n_type[QFIX4], n_type[QVAR5], n_type[FREE6], n_out, n_dupH);
+		if (n_out > 0) fprintf(stderr, "WARNING: %d point boundaries outside the DEM were ignored.\n", n_out);
 	}
 
 	// allocate new buffer to the size of the data
@@ -1803,7 +1890,7 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 		new_PS_Val = memory_allocate_numeric_legacy(pi);
 		new_PS_Q_FP_old = memory_allocate_zero_numeric_legacy(pi);
 		new_PS_Q_SG_old = memory_allocate_zero_numeric_legacy(pi);
-		new_PS_Name = new char[pi * 80];
+		new_PS_Name = new char[(size_t)pi * 80];
 
 
 		for (i = 0; i < pi; i++)
@@ -1812,8 +1899,7 @@ void LoadBCs(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr, 
 			new_ypi[i] = BCptr->ypi[i];
 			new_PS_Ident[i] = BCptr->PS_Ident[i];
 			new_PS_Val[i] = BCptr->PS_Val[i];
-			for (j = 0; j < 80; j++)
-				new_PS_Name[i * 80 + j] = BCptr->PS_Name[i * 80 + j];
+			memcpy(new_PS_Name + (size_t)i * 80, BCptr->PS_Name + (size_t)i * 80, 80);
 		}
 		delete[] BCptr->xpi;
 		delete[] BCptr->ypi;
@@ -1980,6 +2066,22 @@ void LoadBCVar(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr
 		}
 	}
 
+	// name -> index tables. the previous implementation compared every .bdy series name with every
+	// edge cell, river node and point boundary (O(series x points)); with
+	// 200000 point boundaries that is ~4e10 string comparisons. Same matching
+	// rule (exact, case-sensitive name), done by hash lookup.
+	std::unordered_map<std::string, std::vector<int> > bc_lookup, ps_lookup;
+	std::unordered_map<std::string, std::vector<std::pair<int, int> > > ch_lookup;
+	for (i = 0; i < numBCs; i++)
+		if (BCptr->BC_Name[(size_t)i * 80] != '\0') bc_lookup[std::string(BCptr->BC_Name + (size_t)i * 80)].push_back(i);
+	for (i = 0; i < BCptr->numPS; i++)
+		if (BCptr->PS_Name[(size_t)i * 80] != '\0') ps_lookup[std::string(BCptr->PS_Name + (size_t)i * 80)].push_back(i);
+	if (Statesptr->ChannelPresent == ON)
+		for (chseg = 0; chseg < (int)ChannelSegmentsVecPtr->size(); chseg++)
+			for (i = 0; i < ChannelSegments[chseg].chsz; i++)
+				if (ChannelSegments[chseg].Q_Name[(size_t)i * 80] != '\0')
+					ch_lookup[std::string(ChannelSegments[chseg].Q_Name + (size_t)i * 80)].push_back(std::make_pair(chseg, i));
+
 	if (strlen(Fnameptr->bdyfilename) != 0)
 	{
 		fp = fopen_or_die(Fnameptr->bdyfilename, "r", "Loading time varying boundary conditions\n", verbose);
@@ -2020,15 +2122,16 @@ void LoadBCVar(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr
 			*/
 
 			int timeSeriesUsed = 0;
+			const std::string series_name(name_buffer);
 
 			// Check through list (2d domain) of boundary names, if found, point to the loaded time series.
-			for (i = 0; i < numBCs; i++)
 			{
-				if (!strcmp(name_buffer, (BCptr->BC_Name + i * 80)))
+				std::unordered_map<std::string, std::vector<int> >::const_iterator f = bc_lookup.find(series_name);
+				if (f != bc_lookup.end())
+					for (size_t k = 0; k < f->second.size(); k++)
 				{
-					BCptr->BC_Val[i] = C(0.0);
-					BCptr->BC_TimeSeries[i] = timeSeries; // OLD VERSION
-					//BCptr->BC_TimeSeries[i] = &timeSeries; // JAMES SHAW VERSION
+						BCptr->BC_Val[f->second[k]] = C(0.0);
+						BCptr->BC_TimeSeries[f->second[k]] = timeSeries;
 					timeSeriesUsed++;
 				}
 			}
@@ -2036,29 +2139,24 @@ void LoadBCVar(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr
 			// Check through list (river channel) of boundary names, if found, point to the loaded time series.
 			if (Statesptr->ChannelPresent == ON)
 			{
-				for (chseg = 0; chseg < (int)ChannelSegmentsVecPtr->size(); chseg++) // CCS
-				{
-					for (i = 0; i < ChannelSegments[chseg].chsz; i++)
+				std::unordered_map<std::string, std::vector<std::pair<int, int> > >::const_iterator f = ch_lookup.find(series_name);
+				if (f != ch_lookup.end())
+					for (size_t k = 0; k < f->second.size(); k++)
 					{
-						if (!strcmp(name_buffer, (ChannelSegments[chseg].Q_Name + i * 80)))
-						{
-							ChannelSegments[chseg].Q_Val[i] = C(0.0);
-							ChannelSegments[chseg].Q_TimeSeries[i] = timeSeries; // OLD VERSION
-							//ChannelSegments[chseg].Q_TimeSeries[i] = &timeSeries; // JAMES SHAW VERSION
+						ChannelSegments[f->second[k].first].Q_Val[f->second[k].second] = C(0.0);
+						ChannelSegments[f->second[k].first].Q_TimeSeries[f->second[k].second] = timeSeries;
 							timeSeriesUsed++;
 						}
 					}
-				}
-			}
 
 			// Check through point source names, if found, point to the loaded time series.
-			for (i = 0; i < BCptr->numPS; i++)
 			{
-				if (!strcmp(name_buffer, (BCptr->PS_Name + i * 80)))
+				std::unordered_map<std::string, std::vector<int> >::const_iterator f = ps_lookup.find(series_name);
+				if (f != ps_lookup.end())
+					for (size_t k = 0; k < f->second.size(); k++)
 				{
-					BCptr->PS_Val[i] = C(-1.);
-					BCptr->PS_TimeSeries[i] = timeSeries; // OLD VERSION
-					//BCptr->PS_TimeSeries[i] = &timeSeries; // JAMES SHAW VERSION
+						BCptr->PS_Val[f->second[k]] = C(-1.);
+						BCptr->PS_TimeSeries[f->second[k]] = timeSeries;
 					timeSeriesUsed++;
 				}
 			}
@@ -2078,14 +2176,21 @@ void LoadBCVar(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr
 				continue;
 			}
 
-			if (verbose == ON) printf("bdy %s read.\n", name_buffer);
+			if (verbose == ON && BCptr->allTimeSeries.size() <= 20) printf("bdy %s read.\n", name_buffer);
 		}
 		fclose(fp);
+		printf("bdy series used: %d\n", (int)BCptr->allTimeSeries.size());
 	}
 	else
 	{
 		if (verbose == ON) printf("No bdyfile used\n");
+	}
 
+	// these checks now run whether or not a .bdy file is given (in the previous implementation they
+	// were only in the no-.bdy branch, so a QVAR/HVAR name missing from the
+	// .bdy file left a NULL time series that crashed the CPU and GPU solvers).
+	{
+		int n_missing = 0;
 		// Check for bdy names not found in bdy file
 		if (Statesptr->ChannelPresent == ON)
 		{
@@ -2115,9 +2220,15 @@ void LoadBCVar(Fnames *Fnameptr, States *Statesptr, Pars *Parptr, BoundCs *BCptr
 		{
 			if ((BCptr->PS_Ident[i] == QVAR5 || BCptr->PS_Ident[i] == HVAR3) && BCptr->PS_TimeSeries[i] == NULL)
 			{
-				printf("WARNING: bdy %s in bci file not found in bdy file - disabled.\n", BCptr->BC_Name + i * 80);
+				if (n_missing < 20) printf("WARNING: bdy %s (point boundary %d) in bci file not found in bdy file - disabled.\n", BCptr->PS_Name + (size_t)i * 80, i + 1);
+				n_missing++;
 				BCptr->PS_Ident[i] = NONE0;
 			}
+		}
+		if (n_missing > 0)
+		{
+			printf("WARNING: %d point boundaries have no series in the bdy file and were disabled.\n", n_missing);
+			fprintf(stderr, "WARNING: %d point boundaries have no series in the bdy file and were disabled.\n", n_missing);
 		}
 	}
 

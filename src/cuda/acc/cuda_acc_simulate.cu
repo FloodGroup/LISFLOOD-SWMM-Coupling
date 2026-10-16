@@ -14,6 +14,9 @@
 #include "io.h"
 #include <cstdio>
 #include <ctime>
+#include <unordered_map>
+#include <cfloat>
+#include <vector>
 #include "stats.h"
 #include "../../rain/Rainfall_uniform.h"
 #include "cuda_boundary.cuh"
@@ -254,25 +257,38 @@ void lis::cuda::acc::Simulation::run
 	temp_BC.all_time_series = static_cast<TimeSeries*>(cuda::malloc_device(
 		temp_BC.time_series_count * sizeof(TimeSeries)));
 
-	TimeSeries* temp_all_time_series1 = new TimeSeries[temp_BC.time_series_count];
+	// all .bdy series are stored in two contiguous device buffers (the previous implementation made
+	// two cudaMalloc calls per series, i.e. 400000 allocations for 200000 point
+	// series). Series values and the per-series layout are unchanged.
+	size_t ts_total = 0;
+	for (int i = 0; i < temp_BC.time_series_count; i++)
+		ts_total += (size_t)boundCs.allTimeSeries[i].count;
+	NUMERIC_TYPE* d_ts_time = static_cast<NUMERIC_TYPE*>(cuda::malloc_device(ts_total * sizeof(NUMERIC_TYPE)));
+	NUMERIC_TYPE* d_ts_value = static_cast<NUMERIC_TYPE*>(cuda::malloc_device(ts_total * sizeof(NUMERIC_TYPE)));
+	std::unordered_map<const NUMERIC_TYPE*, int> ts_index_by_value;
+	ts_index_by_value.reserve((size_t)temp_BC.time_series_count * 2 + 1);
+	{
+		std::vector<NUMERIC_TYPE> h_ts_time(ts_total), h_ts_value(ts_total);
+		TimeSeries* temp_all_time_series1 = new TimeSeries[temp_BC.time_series_count]();
+		size_t ts_offset = 0;
 	for (int i = 0; i < temp_BC.time_series_count; i++)
 	{
-		int count = boundCs.allTimeSeries[i].count;
+			const int count = boundCs.allTimeSeries[i].count;
 		temp_all_time_series1[i].count = count;
-
-		temp_all_time_series1[i].time = static_cast<NUMERIC_TYPE*>(
-			cuda::malloc_device(count * sizeof(NUMERIC_TYPE)));
-		temp_all_time_series1[i].value = static_cast<NUMERIC_TYPE*>(
-			cuda::malloc_device(count * sizeof(NUMERIC_TYPE)));
-
-		cuda::copy(temp_all_time_series1[i].time, boundCs.allTimeSeries[i].time,
-			count * sizeof(NUMERIC_TYPE));
-		cuda::copy(temp_all_time_series1[i].value, boundCs.allTimeSeries[i].value,
-			count * sizeof(NUMERIC_TYPE));
-	}
+			temp_all_time_series1[i].time = d_ts_time + ts_offset;
+			temp_all_time_series1[i].value = d_ts_value + ts_offset;
+			temp_all_time_series1[i].current_value = C(0.0);
+			memcpy(h_ts_time.data() + ts_offset, boundCs.allTimeSeries[i].time, count * sizeof(NUMERIC_TYPE));
+			memcpy(h_ts_value.data() + ts_offset, boundCs.allTimeSeries[i].value, count * sizeof(NUMERIC_TYPE));
+			ts_offset += (size_t)count;
+			ts_index_by_value[boundCs.allTimeSeries[i].value] = i;
+		}
+		cuda::copy(d_ts_time, h_ts_time.data(), ts_total * sizeof(NUMERIC_TYPE));
+		cuda::copy(d_ts_value, h_ts_value.data(), ts_total * sizeof(NUMERIC_TYPE));
 	cuda::copy(temp_BC.all_time_series, temp_all_time_series1,
 		temp_BC.time_series_count * sizeof(TimeSeries));
 	delete[] temp_all_time_series1;
+	}
 	//--------------------------------------------------------------------------------------
 	//lis::cuda::Boundary::initialise_all_time_series(temp_BC, &boundCs);
 
@@ -287,25 +303,22 @@ void lis::cuda::acc::Simulation::run
 
 	temp_BC.BC_time_series = static_cast<TimeSeries**>(
 		cuda::malloc_device(boundCs.numBCs * sizeof(TimeSeries*)));
-	TimeSeries** time_series2 = new TimeSeries * [boundCs.numBCs];
+	TimeSeries** time_series2 = new TimeSeries * [boundCs.numBCs]();
 
 	for (int bc_i = 0; bc_i < boundCs.numBCs; bc_i++)
 	{
 		if (boundCs.BC_Ident[bc_i] == HVAR3 || boundCs.BC_Ident[bc_i] == QVAR5)
 		{
-
+			// hash lookup of the series (same pointer-identity match as the previous implementation)
 			::TimeSeries* target = boundCs.BC_TimeSeries[bc_i];
-
-			for (std::vector<::TimeSeries>::size_type ts_i = 0,
-				e = boundCs.allTimeSeries.size(); ts_i != e; ts_i++)
+			std::unordered_map<const NUMERIC_TYPE*, int>::const_iterator f =
+				target != nullptr ? ts_index_by_value.find(target->value) : ts_index_by_value.end();
+			if (f == ts_index_by_value.end())
 			{
-				::TimeSeries* candidate = &(boundCs.allTimeSeries[ts_i]);
-				if (candidate->value == target->value)
-				{
-					time_series2[bc_i] = &(temp_BC.all_time_series[ts_i]);
-					//+ ts_i*sizeof(TimeSeries*);
-				}
+				fprintf(stderr, "ERROR: edge boundary %d has no time series on the GPU.\n", bc_i);
+				exit(EXIT_FAILURE);
 			}
+			time_series2[bc_i] = temp_BC.all_time_series + f->second;
 		}
 	}
 	cuda::copy(temp_BC.BC_time_series,
@@ -381,17 +394,16 @@ void lis::cuda::acc::Simulation::run
 		{
 			if (boundCs.PS_Ident[ps_i] == HVAR3 || boundCs.PS_Ident[ps_i] == QVAR5)
 			{
+				// hash lookup (the previous implementation scanned all series for every point)
 				::TimeSeries* target = boundCs.PS_TimeSeries[ps_i];
-
-				for (std::vector<::TimeSeries>::size_type ts_i = 0,
-					e = boundCs.allTimeSeries.size(); ts_i != e; ts_i++)
-				{
-					::TimeSeries* candidate = &(boundCs.allTimeSeries[ts_i]);
-					if (candidate->value == target->value)
+				std::unordered_map<const NUMERIC_TYPE*, int>::const_iterator f =
+					target != nullptr ? ts_index_by_value.find(target->value) : ts_index_by_value.end();
+				if (f == ts_index_by_value.end())
 					{
-						time_series3[ps_i] = temp_BC.all_time_series + ts_i;
-					}
+					fprintf(stderr, "ERROR: point boundary %d has no time series on the GPU.\n", ps_i + 1);
+					exit(EXIT_FAILURE);
 				}
+				time_series3[ps_i] = temp_BC.all_time_series + f->second;
 			}
 		}
 		cuda::copy(temp_BC.PS_time_series, time_series3, (coupling_count + temp_numPS_acc) * sizeof(TimeSeries*));
@@ -433,6 +445,10 @@ void lis::cuda::acc::Simulation::run
 	temp_BC.coupling_start = temp_numPS_acc;
 	temp_BC.outfall_start = outfall_source_start;
 	cuda::copy_to_symbol(cuda::boundaries, &temp_BC, sizeof(BoundaryConditions));
+	// launch sizes of the boundary kernels follow the real counts
+	cuda::Boundary::set_launch_counts(temp_BC.time_series_count, temp_BC.BC_count, temp_BC.PS_count);
+	if (verbose == ON) printf("GPU boundaries: %d bdy series (%zu values), %d edge cells, %d point sources (%d from bci, %d coupling)\n",
+		temp_BC.time_series_count, ts_total, temp_BC.BC_count, temp_BC.PS_count, temp_numPS_acc, coupling_count);
 
 	//NUMERIC_TYPE dt_cpu = 0.0;
 
@@ -520,8 +536,11 @@ void lis::cuda::acc::Simulation::run
 			}
 			for (int flowindex = 0; flowindex < outfall_source_count; ++flowindex)
 				temp_psvalue[outfall_source_start + flowindex] = C(0.0);
-			cuda::copy(temp_BC.PS_value, temp_psvalue,
-					(coupling_count + temp_numPS_acc) * sizeof(NUMERIC_TYPE));
+			// copy only the coupling part. The user point values on the
+			// device are constant (HFIX/QFIX) or rewritten by update_time_series
+			// before use (HVAR/QVAR), so re-sending them every step (the previous implementation) is not needed.
+			cuda::copy(temp_BC.PS_value + temp_numPS_acc, temp_psvalue + temp_numPS_acc,
+					coupling_count * sizeof(NUMERIC_TYPE));
 		}
 		else
 		{
@@ -766,5 +785,16 @@ void lis::cuda::acc::Simulation::run
 	cuda::free_device(d_DEM);
 	cuda::free_device(d_manning);
 	Flow::free_pinned(U);
-	cuda::Boundary::free_device(boundaries);
+	// free the boundary buffers that were actually allocated (the previous implementation passed the
+	// host shadow of the __constant__ symbol, which freed nothing).
+	cuda::free_device(d_ts_time);
+	cuda::free_device(d_ts_value);
+	cuda::free_device(temp_BC.all_time_series);
+	cuda::free_device(temp_BC.BC_type);
+	cuda::free_device(temp_BC.BC_value);
+	cuda::free_device(temp_BC.BC_time_series);
+	cuda::free_device(temp_BC.PS_type);
+	cuda::free_device(temp_BC.PS_value);
+	cuda::free_device(temp_BC.PS_time_series);
+	cuda::free_device(temp_BC.PS_idx);
 }
