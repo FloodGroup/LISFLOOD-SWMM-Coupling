@@ -599,6 +599,8 @@ void stats_updateNodeStats(int j, double tStep, DateTime aDate)
             OutfallStats[k].totalLoad[p] += Node[j].inflow * 
             Node[j].newQual[p] * tStep;
         }
+        // Protect the shared report statistic in the parallel node loop.
+#pragma omp atomic
         SysOutfallFlow += Node[j].inflow;
     }
 

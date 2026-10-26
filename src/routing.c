@@ -62,6 +62,14 @@ static int  NextEvent;
 static int  BetweenEvents;
 static double NewRuleTime;                                                     //(5.1.013)
 
+#include "hydraulic_restart_io.h"
+int routing_restart(void* stream, int reading)
+{
+    FILE* f=(FILE*)stream;
+    HR_VALUE(NextEvent); HR_VALUE(BetweenEvents); HR_VALUE(NewRuleTime);
+    return 0;
+}
+
 //-----------------------------------------------------------------------------
 //  External functions (declared in funcs.h)
 //-----------------------------------------------------------------------------

@@ -25,6 +25,8 @@
 
 ## Overview
 
+Current source release: **1.3.0**. Release changes are recorded in [CHANGES.md](CHANGES.md).
+
 This repository couples the 2-D hydrodynamic model [LISFLOOD-FP](https://www.bristol.ac.uk/geography/research/hydrology/models/lisflood/) with the 1-D sewer model [EPA SWMM](https://www.epa.gov/water-research/storm-water-management-model-swmm) inside a single executable. Surface water and pipe water exchange in both directions while both models run, with the 2-D model on multi-core CPUs (OpenMP) or on an NVIDIA GPU (CUDA):
 
 - **Manholes** drain surface water into the sewer, or spill sewer water onto the street when the network surcharges. Surcharge and drowned inflow follow orifice laws, and free inflow over the manhole crest follows a weir law, all driven by the head difference between the two models.
@@ -41,6 +43,7 @@ The model retains LISFLOOD-FP's surface-flow solvers and SWMM's conduit dynamic-
 | **Exchange interval** | every 2-D step, or every *T* seconds with exact time landing |
 | **Data transfer on GPU** | only the depths of coupled cells move between device and host |
 | **Mass balance** | volume-based continuity at coupled outfalls, supply-limited withdrawals everywhere, and a per-run water-balance audit on GPU |
+| **Hydraulic restart** | bundled surface, SWMM and pending-water state for CPU/CUDA ACC and FV1; [supported configurations](docs/user_guide.md#8-hotstart) |
 
 ## How the coupling works
 
@@ -48,7 +51,9 @@ The model retains LISFLOOD-FP's surface-flow solvers and SWMM's conduit dynamic-
   <img src="docs/figures/layers.svg" width="100%" alt="Three components: the blue LISFLOOD-FP surface model, the orange coupling layer and the green SWMM network. Surface heads, receiving-cell geometry and inlet volumes pass to SWMM; network heads, storage and integrated outfall or flooding volumes return to the coupler.">
 </p>
 
-Each 2-D time step, the coupler reads the water depth in every cell that contains a manhole, computes the manhole discharge, and adds it to the surface as a point source. The same discharge is accumulated as inflow for SWMM. When an exchange is due, SWMM advances by exactly the elapsed interval using its own sub-steps. It receives the accumulated inflow as a constant rate and the current water level of every receiving cell. SWMM then returns the volume that actually crossed each `COUPLED` outfall and each flooded node, and LISFLOOD-FP applies those volumes to the surface.
+Each 2-D time step, the coupler applies net rainfall before reading the depths of manhole cells and computing their exchange. Surface-to-network volumes accumulate until an exchange is due. SWMM then advances by the elapsed interval using its own adaptive substeps, receiving the interval-mean inlet rate and current receiving-cell levels.
+
+With a fixed exchange interval, positive outfall and node-flooding returns are distributed over the following interval; reverse outfall withdrawals are applied immediately. Any remaining return volume is released at the end of the run. With `coupleint step`, returns are applied in the current step. Both pending-water reservoirs are retained by bundled hydraulic restart and included in the CUDA water-balance audit.
 
 The CPU and CUDA drivers run this cycle with the same equations, the same limits and the same exchange clock.
 
@@ -106,7 +111,9 @@ coupleint    step               # or a positive number of seconds
 | [User guide](docs/user_guide.md) | Building for CPU or GPU, preparing a coupled case, every coupling keyword, the `floodconfig` format, outputs, hotstart, troubleshooting |
 | [Coupling methodology](docs/coupling_methodology.md) | Architecture, the step-by-step exchange cycle, manhole and outfall equations, time synchronisation, mass-balance audit |
 | [Examples](examples/README.md) | Two small runnable cases: surface-only smoke test and a synthetic coupled network |
-| [Source map](src/README.md) | Where the coupling code lives inside `src/`, and what was changed relative to upstream |
+| [Source map](src/README.md) | Source layout and the roles of the coupling modules |
+| [Validation](docs/validation.md) | Reproducible short coupling, boundary and restart checks, with their limits |
+| [Changelog](CHANGES.md) | Public release history |
 
 ## Repository layout
 
@@ -122,7 +129,9 @@ coupleint    step               # or a positive number of seconds
 ├── src/                          LISFLOOD-FP 8.1 + SWMM 5.1.015 + coupling layer (CPU and CUDA)
 ├── tools/
 │   ├── build.ps1                 Windows build script
-│   └── run.ps1                   Windows launcher used in the binary package
+│   ├── run.ps1                   Windows launcher used in the binary package
+│   └── test_coupled_restart.py   fixed-interval and restart checks
+├── CHANGES.md                    public release history
 ├── CITATION.cff
 └── LICENSE                       GPL-2.0
 ```
@@ -136,7 +145,7 @@ coupleint    step               # or a positive number of seconds
 
 **The whole repository is released under GPL-2.0** ([`LICENSE`](LICENSE)). SWMM is public domain and is distributed here under the same licence; its use does not imply endorsement by the U.S. EPA.
 
-Pre-built Windows binaries are published on the **Releases** page, not in the git tree. They include Microsoft and Intel runtime libraries under those vendors' redistribution terms; see `THIRD_PARTY_NOTICES.txt` inside the archive.
+Pre-built Windows binaries are published on the **Releases** page, not in the git tree. Runtime libraries retain their respective redistribution terms; see `THIRD_PARTY_NOTICES.txt` inside the archive.
 
 ## Citation
 

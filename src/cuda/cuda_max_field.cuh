@@ -25,6 +25,7 @@ public:
 	void update(NUMERIC_TYPE* H);
 	void updateACC(NUMERIC_TYPE* H);
 	void write();
+	NUMERIC_TYPE* restart_depth() { return maxH; }
 
 	~MaxField();
 

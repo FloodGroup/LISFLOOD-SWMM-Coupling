@@ -109,6 +109,20 @@ static double* NodeMaxResidualTime;
 static double  Omega;                  // actual under-relaxation parameter
 static int     Steps;                  // number of Picard iterations
 
+#include "hydraulic_restart_io.h"
+int dynwave_restart(void* stream, int reading)
+{
+    FILE* f=(FILE*)stream;
+    HR_VALUE(VariableStep); HR_VALUE(Omega); HR_VALUE(Steps);
+    HR_ARRAY(Xnode,Nobjects[NODE]);
+    HR_ARRAY(NodeNonConvergeCount,Nobjects[NODE]);
+    HR_ARRAY(NodeFirstNonConvergeTime,Nobjects[NODE]);
+    HR_ARRAY(NodeLastNonConvergeTime,Nobjects[NODE]);
+    HR_ARRAY(NodeMaxHeadResidual,Nobjects[NODE]);
+    HR_ARRAY(NodeMaxResidualTime,Nobjects[NODE]);
+    return 0;
+}
+
 //-----------------------------------------------------------------------------
 //  Function declarations
 //-----------------------------------------------------------------------------
@@ -438,10 +452,10 @@ void findLinkFlows(double dt)
 {
     int i;
 
-    // --- find new flow in each non-dummy conduit
+    // Balance variable conduit workloads with dynamic scheduling.
 #pragma omp parallel num_threads(NumThreads)
 {
-    #pragma omp for
+    #pragma omp for schedule(dynamic, 64)
     for ( i = 0; i < Nobjects[LINK]; i++)
     {
         if ( isTrueConduit(i) && !Link[i].bypassed )
@@ -651,9 +665,10 @@ int findNodeDepths(double dt)
     // --- compute new depth for all non-outfall nodes and determine if
     //     depth change from previous iteration is below tolerance
     converged = TRUE;
+    // Balance iterative coupled-node solves with dynamic scheduling.
 #pragma omp parallel num_threads(NumThreads) reduction(&:converged)
 {
-    #pragma omp for private(yOld)
+    #pragma omp for private(yOld) schedule(dynamic, 32)
     for ( i = 0; i < Nobjects[NODE]; i++ )
     {
         if ( Node[i].type == OUTFALL ) continue;

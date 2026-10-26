@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 1.3.0 - 2026-10-26
+
+- Synchronise fixed-interval coupling and hydraulic restart across CPU ACC, CPU FV1, CUDA ACC and CUDA FV1, retaining each solver's own CFL condition.
+- Choose the CPU ACC time step before flux computation. Recompute CUDA ACC's CFL limit from current depth instead of retaining the smallest historical limit.
+- Align exchange, rain-frame, restart and end times with equal substeps bounded by the current CFL limit, and accumulate simulation time in double precision.
+- Spread positive outfall and node-flooding returns over the following fixed exchange interval. Keep reverse outfall withdrawals immediate and release remaining returns at the end; every-step coupling remains immediate. This changes local water-depth histories and can change peak depths.
+- Save and restore surface fields, maxima, SWMM hydraulic history, exchange progress, pending inlet and return volumes, and return rates in one bundled restart file. Retain legacy ACC warm-start reading and the separate surface-only checkpoint mechanism.
+- Validate restart format, solver/backend, precision, grid, mapping, exchange settings and record completeness. Reject unrecognised coupled formats instead of falling back to a fresh run. Bundled restart requires the same inputs and build, with hydraulic-only SWMM routing; reject unsupported runoff, RDII, storage exfiltration, routing-interface input, events and active quality configurations before running.
+- Compile SWMM C routing sources with OpenMP, balance conduit and node workloads dynamically, and protect the shared flooded-volume statistic.
+- Replace repeated receiving-cell scans with hashed cell lookup and precomputed source slots on CPU and CUDA.
+- Include both pending-water reservoirs in the CUDA combined water balance, remove internal transfers from external budgets, and log an independent interface residual and restart baseline.
+- Report SWMM thread count and measured solver/coupling wall time for both surface solvers. Return a nonzero exit code for SWMM initialisation and restart errors.
+- Add reproducible fixed-interval, every-step and restart regressions with positive and negative net rain, alongside the existing wet-coupling and coincident-source checks.
+- Update the user guide and source map. Redraw the exchange and timing schematics with signed-flow paths, pending-water reservoirs, delayed-return timelines, CFL alignment and defined units; keep implementation names and runtime messages independent of internal development labels.
+
 ## 1.2.0
 
 - Preserve SWMM's conduit midpoint flow-area history when accounting for coupled storage, avoiding spurious inertial forcing.

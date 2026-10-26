@@ -23,4 +23,5 @@ int coupled_ready(void);
 double coupled_available(int node);
 double coupled_old_volume(int node);
 void coupled_remaining_interval(double seconds);
+int coupled_restart(void* stream, int reading);
 #endif

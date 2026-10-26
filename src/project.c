@@ -69,13 +69,7 @@
 #if defined(_OPENMP)                                                           //(5.1.013)
   #include <omp.h>                                                             //     
 #else                                                                          //
-  /* the stub is file-local (static). In the previous implementation it was a global symbol; the
-     SWMM C sources are compiled without OpenMP while the LISFLOOD C++ sources
-     use it, so the linker bound the C++ OpenMP loops' omp_get_num_threads() to
-     this stub (always 1) while omp_get_thread_num() came from the OpenMP
-     runtime. With >1 thread, GCC's static schedule then gave thread k the rows
-     k*ysz..(k+1)*ysz-1 and FloodplainQ/CalcFPQxAcc read past the grid
-     (segmentation fault of the CPU build with OMP_NUM_THREADS>1).          */
+  /* Keep the fallback local so it cannot override another module's OpenMP. */
   static int omp_get_num_threads(void) { return 1;}                            //
 #endif                                                                         //
 

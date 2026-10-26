@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cfloat>
 #include <vector>
+#include <unordered_map>
 
 extern "C" {
 #include "headers.h"
@@ -21,6 +22,7 @@ void map_internal_outfalls(Fnames* filenames, Vconnect* coupling,
     coupling->outfall_dem_Vindex_uni = nullptr;
     coupling->outfall_dynamic_stage = nullptr;
     coupling->dynamic_outfall_count = 0;
+    coupling->outfall_slot = nullptr;
 
     int total = 0;
     for (int n=0; n<Nobjects[NODE]; ++n) if (Node[n].type == OUTFALL) ++total;
@@ -30,6 +32,7 @@ void map_internal_outfalls(Fnames* filenames, Vconnect* coupling,
     coupling->outfall_dem_Vindex = new int[total]();
     coupling->outfall_dem_Vindex_uni = new int[total]();
     coupling->outfall_dynamic_stage = new unsigned char[total]();
+    coupling->outfall_slot = new int[total]();
 
     FILE* log = fopen(filenames->flooderrorfile, "a");
     if (log) fprintf(log, "SWMM OUTFALL TO 2D MAPPING START\n");
@@ -52,10 +55,11 @@ void map_internal_outfalls(Fnames* filenames, Vconnect* coupling,
         const int k=coupling->outfall_count++;
         coupling->outfall_node_Vindex[k]=n;
         coupling->outfall_dem_Vindex[k]=cell;
-        bool found=false;
+        int slot=-1;
         for(int u=0;u<coupling->outfall_dem_count;++u)
-            if(coupling->outfall_dem_Vindex_uni[u]==cell){found=true;break;}
-        if(!found) coupling->outfall_dem_Vindex_uni[coupling->outfall_dem_count++]=cell;
+            if(coupling->outfall_dem_Vindex_uni[u]==cell){slot=u;break;}
+        if(slot<0){slot=coupling->outfall_dem_count;coupling->outfall_dem_Vindex_uni[coupling->outfall_dem_count++]=cell;}
+        coupling->outfall_slot[k]=slot;
 
         const int oi=Node[n].subIndex;
         if(Outfall[oi].type==COUPLED_OUTFALL)
@@ -89,6 +93,8 @@ void free_outfalls(Vconnect* coupling)
     delete[] coupling->outfall_dem_Vindex;
     delete[] coupling->outfall_dem_Vindex_uni;
     delete[] coupling->outfall_dynamic_stage;
+    delete[] coupling->outfall_slot;
+    coupling->outfall_slot=nullptr;
     coupling->outfall_node_Vindex=nullptr;
     coupling->outfall_dem_Vindex=nullptr;
     coupling->outfall_dem_Vindex_uni=nullptr;
@@ -122,13 +128,15 @@ void collect_return_sources(Vconnect* coupling, BoundCs* boundaries,
     for(int u=0;u<coupling->outfall_dem_count;++u)
         boundaries->PS_Val[outfall_source_start+u]=C(0.0);
 
+    // Map receiving cells to source slots.
+    std::unordered_map<int,int> slot_of_cell;
+    slot_of_cell.reserve((size_t)coupling->count_dem_index*2+1);
+    for(int u=0;u<coupling->count_dem_index;++u) slot_of_cell.emplace(coupling->dem_Vindex_uni[u],u);
     std::vector<int> slots(Nobjects[NODE],-1);
     for(int i=0;i<coupling->count_index;++i)
     {
-        int slot=-1;
-        for(int u=0;u<coupling->count_dem_index;++u)
-            if(coupling->dem_Vindex_uni[u]==coupling->dem_Vindex[i]){slot=u;break;}
-        slots[coupling->node_Vindex[i]]=slot;
+        std::unordered_map<int,int>::const_iterator f=slot_of_cell.find(coupling->dem_Vindex[i]);
+        slots[coupling->node_Vindex[i]]= f==slot_of_cell.end() ? -1 : f->second;
     }
     for(int n=0;n<Nobjects[NODE];++n)
     {
@@ -143,13 +151,9 @@ void collect_return_sources(Vconnect* coupling, BoundCs* boundaries,
     {
         const double volume=swmm_getOutfallExchangeVolume(coupling->outfall_node_Vindex[k]);
         if(volume<=0 && !coupling->outfall_dynamic_stage[k]) continue;
-        for(int u=0;u<coupling->outfall_dem_count;++u)
-            if(coupling->outfall_dem_Vindex_uni[u]==coupling->outfall_dem_Vindex[k])
-            {
-                boundaries->PS_Val[outfall_source_start+u] +=
-                    (NUMERIC_TYPE)(volume/(exchange_seconds*pars->dy)*scale);
-                break;
-            }
+        // Use the precomputed receiving-cell slot.
+        boundaries->PS_Val[outfall_source_start+coupling->outfall_slot[k]] +=
+            (NUMERIC_TYPE)(volume/(exchange_seconds*pars->dy)*scale);
     }
     for(int u=0;u<coupling->outfall_dem_count;++u)
     {

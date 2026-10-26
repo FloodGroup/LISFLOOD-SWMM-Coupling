@@ -1130,6 +1130,97 @@ int DLLEXPORT swmm_advanceCoupled(double seconds, double* elapsedTime)
     return err;
 }
 
+#include "hydraulic_restart_io.h"
+extern int dynwave_restart(void* stream,int reading);
+extern int routing_restart(void* stream,int reading);
+
+int DLLEXPORT swmm_hydraulicRestartSupported(void)
+{
+    int n;
+    if(!IsStartedFlag || RouteModel!=DW || DoRunoff || NumEvents ||
+       (Nobjects[POLLUT] && !IgnoreQuality) || Finflows.mode==USE_FILE) return 0;
+    for(n=0;n<Nobjects[NODE];++n) if(Node[n].rdiiInflow) return 0;
+    for(n=0;n<Nnodes[STORAGE];++n) if(Storage[n].exfil) return 0;
+    return 1;
+}
+
+int DLLEXPORT swmm_hydraulicRestart(void* stream,int reading)
+{
+    FILE* f=(FILE*)stream;
+    int n,l, nodes=Nobjects[NODE],links=Nobjects[LINK],conduits=Nlinks[CONDUIT];
+    DateTime start=StartDateTime;
+    extern TRoutingTotals FlowTotals, StepFlowTotals, OldStepFlowTotals;
+    if(!swmm_hydraulicRestartSupported()) return 1;
+    HR_VALUE(nodes); HR_VALUE(links); HR_VALUE(conduits); HR_VALUE(start);
+    if(nodes!=Nobjects[NODE] || links!=Nobjects[LINK] || conduits!=Nlinks[CONDUIT] || start!=StartDateTime) return 1;
+    for(n=0;n<nodes;++n)
+    {
+        char id[MAXFNAME+1]={0};
+        int type=Node[n].type;
+        double invert=Node[n].invertElev, full=Node[n].fullDepth;
+        strncpy(id,Node[n].ID,MAXFNAME);
+        HR_ARRAY(id,sizeof(id)); HR_VALUE(type); HR_VALUE(invert); HR_VALUE(full);
+        if(strcmp(id,Node[n].ID) || type!=Node[n].type || invert!=Node[n].invertElev || full!=Node[n].fullDepth) return 1;
+    }
+    for(l=0;l<links;++l)
+    {
+        char id[MAXFNAME+1]={0};
+        int n1=Link[l].node1,n2=Link[l].node2,type=Link[l].type;
+        strncpy(id,Link[l].ID,MAXFNAME);
+        HR_ARRAY(id,sizeof(id)); HR_VALUE(n1); HR_VALUE(n2); HR_VALUE(type);
+        if(strcmp(id,Link[l].ID) || n1!=Link[l].node1 || n2!=Link[l].node2 || type!=Link[l].type) return 1;
+    }
+    HR_VALUE(OldRoutingTime); HR_VALUE(NewRoutingTime); HR_VALUE(ElapsedTime);
+    HR_VALUE(OldRunoffTime); HR_VALUE(NewRunoffTime);
+    HR_VALUE(TotalStepCount); HR_VALUE(NonConvergeCount);
+    HR_VALUE(CoupledStageCheckDone);
+    if(NewRoutingTime<0 || NewRoutingTime>TotalDuration) return 1;
+    for(n=0;n<nodes;++n)
+    {
+#define HR_NODE(field) HR_VALUE(Node[n].field)
+        HR_NODE(inflow); HR_NODE(outflow); HR_NODE(losses);
+        HR_NODE(oldVolume); HR_NODE(newVolume); HR_NODE(overflow);
+        HR_NODE(oldDepth); HR_NODE(newDepth); HR_NODE(oldLatFlow); HR_NODE(newLatFlow);
+        HR_NODE(oldFlowInflow); HR_NODE(oldNetInflow); HR_NODE(updated);
+#undef HR_NODE
+    }
+    for(l=0;l<links;++l)
+    {
+#define HR_LINK(field) HR_VALUE(Link[l].field)
+        HR_LINK(oldFlow); HR_LINK(newFlow); HR_LINK(oldDepth); HR_LINK(newDepth);
+        HR_LINK(oldVolume); HR_LINK(newVolume); HR_LINK(surfArea1); HR_LINK(surfArea2);
+        HR_LINK(setting); HR_LINK(targetSetting); HR_LINK(timeLastSet); HR_LINK(froude);
+        HR_LINK(flowClass); HR_LINK(dqdh); HR_LINK(direction); HR_LINK(bypassed);
+        HR_LINK(normalFlow); HR_LINK(inletControl);
+#undef HR_LINK
+    }
+    HR_ARRAY(Conduit,conduits);
+    for(n=0;n<Nnodes[OUTFALL];++n)
+    { HR_VALUE(Outfall[n].externalStage); HR_VALUE(Outfall[n].externalStageActive); HR_VALUE(Outfall[n].vRouted); }
+    for(n=0;n<Nnodes[STORAGE];++n)
+    { HR_VALUE(Storage[n].hrt); HR_VALUE(Storage[n].evapLoss); HR_VALUE(Storage[n].exfilLoss); }
+    HR_ARRAY(ExchangeVolumes,nodes); HR_ARRAY(FloodVolumes,nodes);
+    HR_ARRAY(Node_Inflow,nodes);
+    // Continuity reports after a restart describe the resumed segment.
+    // The step history is retained for the next trapezoidal routing update.
+    HR_VALUE(StepFlowTotals); HR_VALUE(OldStepFlowTotals);
+    if(dynwave_restart(stream,reading) || routing_restart(stream,reading) || coupled_restart(stream,reading)) return 1;
+    if(reading)
+    {
+        memset(&FlowTotals,0,sizeof(FlowTotals));
+        for(n=0;n<nodes;++n) FlowTotals.initStorage+=Node[n].newVolume;
+        for(l=0;l<links;++l) FlowTotals.initStorage+=Link[l].newVolume;
+        ReportTime=(floor(NewRoutingTime/(1000.0*ReportStep))+1.0)*1000.0*ReportStep;
+    }
+    return 0;
+}
+
+int DLLEXPORT swmm_getNumThreads(void)
+//  Number of dynamic-wave threads, or 1 without OpenMP.
+{
+    return NumThreads;
+}
+
 double DLLEXPORT swmm_getOutfallExchangeVolume(int nodeIndex)
 {
     if (nodeIndex < 0 || nodeIndex >= Nobjects[NODE] || !IsStartedFlag) return 0.0;

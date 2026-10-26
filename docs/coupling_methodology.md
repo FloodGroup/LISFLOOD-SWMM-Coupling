@@ -55,25 +55,27 @@ The 2-D side of the coupling has one implementation per back end:
 ## 3. One coupling cycle
 
 <p align="center">
-  <img src="figures/exchange_cycle.svg" width="100%" alt="Six-stage summary of the coupling cycle: apply net rainfall, exchange through manholes, accumulate volumes, advance SWMM when due, collect returned volumes and update the surface.">
+  <img src="figures/exchange_cycle.svg" width="100%" alt="Three-panel coupling schematic: net forcing and signed manhole exchange at every surface step; interval-mean inlet rates and adaptive SWMM routing at exchange times; immediate reverse withdrawal or storage and release of positive returned volumes, with both interface reservoirs included in the water budget.">
 </p>
 
-The figure groups the cycle into six stages. The table below expands those stages into nine implementation steps. All four drivers (CPU ACC, CPU FV1, CUDA ACC, CUDA FV1) run the same cycle:
+Panel a shows exchange work at each surface step, panel b shows the network advance when an exchange is due, and panel c shows fixed-interval return scheduling. Hydrodynamic flux-kernel placement is omitted because it differs among drivers. The table below expands the exchange operations for CPU ACC, CPU FV1, CUDA ACC and CUDA FV1:
+
+In the figure, $Q_i$ is signed manhole flow into SWMM, $V_i$ is its integrated volume, and $\Delta V_s$ is the net volume returned after collecting outfall and node-flooding contributions in source slot $s$. A slot is mapped to a 2-D cell; multiple source slots may share one cell. Scheduling acts on each slot's net volume. $P_s$ is pending positive return volume, $A_s$ is cell area, and $T_{\mathrm{next}}$ is the following interval's duration. Volumes are in m³ and schematic rates are volumetric m³/s; the implementation divides by cell width for LISFLOOD point-source fluxes. $P_{\to\mathrm{1D}}=\sum_i V_i$ and $P_{\to\mathrm{2D}}=\sum_s P_s$ enter the combined water budget.
 
 | Step | What happens | CPU | CUDA |
 |:---:|---|---|---|
-| 1 | The 2-D step `dt` is set by the CFL condition and rainfall clipping. In interval mode it is also shortened so the exchange time lands exactly on the interval boundary; in step mode it may not pass the end of the SWMM run. | `FloodplainQ` (ACC), `Tstep_from_cfl` (FV1), `clip_step`, `swmm_couple_clip_dt` | `update_dt_ACC`, `clip_step`, `swmm_couple_clip_dt` |
+| 1 | Choose the current CFL limit, then divide the remaining time to the next exchange, rain frame, restart or end target into equal substeps no longer than that limit. ACC chooses this step before computing fluxes; FV1 retains its velocity-dependent CFL formula. | `CalcT` (ACC), `Tstep_from_cfl` (FV1), `coupling_equal_substep`, `coupling_step` | `update_dt_ACC`, `coupling_step` |
 | 2 | Net rainfall and infiltration are applied, then the depths of the coupled cells are read. | `DynamicRain::update_H`; depths read from the host array | `DynamicRain::updateACC` (ACC), `DynamicRain::update` (FV1); `gather_coupling_depths` copies the coupled depths to the host |
 | 3 | The discharge through every manhole is computed from the SWMM node head and the surface water level ([§5](#5-manhole-exchange)). | `verticalcon::cal_exchange_flow` | `Topography::cal_flow_exchange` |
-| 4 | The manhole discharges become point sources on the surface. | `apply_coupled_sources` (ACC), `update_point_sources` (FV1) | `Boundary::update_H` |
+| 4 | Manhole discharges and the scheduled share of pending positive returns become surface sources. | `swmm_return_apply`, `apply_coupled_sources` (ACC), `update_point_sources` (FV1) | `swmm_return_apply`, `Boundary::update_H` |
 | 5 | Inlet volumes are accumulated: \(V_i \mathrel{+}= Q_i\,dt\). | `swmm_couple_accumulate` | `swmm_couple_accumulate` |
 | — | If the interval is not complete, the loop continues with the next 2-D step. | `swmm_couple_due` | `swmm_couple_due` |
 | 6 | The accumulated volume is passed to SWMM as a constant inflow rate `Node_Inflow = V / T`, and each `COUPLED` outfall receives the bed, depth and area of its cell. | `swmm_couple_write_inflow`, `cpu_coupling::update_outfall_stages` | `swmm_couple_write_inflow`, `Topography::update_outfall_stages` |
 | 7 | SWMM routes the network forward by `T`. Inside every dynamic-wave sub-step the coupled components use the volume-based update of [§6](#6-coupled-outfalls). | `swmm_advanceCoupled` | `swmm_advanceCoupled` |
 | 8 | Exchanged volumes at outfalls and flooded nodes are read back and converted to point-source fluxes. | `cpu_coupling::collect_return_sources` | `collect_outfall_source_values`, `collect_surface_flood_values` |
-| 9 | The returned sources are added to the surface depths and the exchange clock is reset. | `apply_coupled_sources` (ACC), `update_point_sources` (FV1), `swmm_couple_advance` | `update_point_sources_range`, `swmm_couple_advance` |
+| 9 | In fixed-interval mode, queue positive returns for the next interval and apply reverse withdrawals immediately. Release the remainder if no next interval follows. Reset the exchange clock. | `swmm_return_schedule`, `apply_coupled_sources` (ACC), `update_point_sources` (FV1), `swmm_couple_advance` | `swmm_return_schedule`, `update_point_sources_range`, `swmm_couple_advance` |
 
-With `coupleint step`, steps 5 and 6 collapse: the inflow of the current step is passed directly (`nodeinflow_cal`) and `T` equals `dt`.
+With `coupleint step`, steps 5 and 6 collapse: the inflow of the current step is passed directly (`nodeinflow_cal`) and `T` equals `dt`. Returned volumes are applied in that step without a delayed return reservoir.
 
 **Order within a step.** Rainfall and infiltration are applied before the manhole discharge is computed, so the two sinks cannot both remove the same surface water. The CPU drivers then apply the inlet sources to the depths directly, before the flux divergence; the CUDA drivers apply them together with the flux divergence in `Boundary::update_H`. Both give the same volume per step.
 
@@ -215,7 +217,7 @@ For each dynamic-wave sub-step \(\delta t\) (hooks in `dynwave.c` and `routing.c
 
 5. **Account** (`coupled_account`). SWMM's routing totals are corrected so its own continuity report stays consistent with the backward-Euler update.
 
-After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in m³ (`coupled_exchange`) and applied to the receiving cell as a point source. On the CPU, `collect_return_sources` also checks that a reverse flow (cell → sewer) never takes more water than the cell holds.
+After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in m³ (`coupled_exchange`) and converted into receiving-cell sources. Fixed-interval positive volumes are scheduled over the next interval; reverse withdrawals are immediate. On the CPU, `collect_return_sources` also checks that reverse flow (cell → sewer) never takes more water than the cell holds.
 
 ### 6.5 Requirements checked at start-up
 
@@ -236,8 +238,10 @@ After the interval, \(\sum \Delta V_{\text{ex}}\) is returned to LISFLOOD-FP in 
 ## 8. Time synchronisation
 
 <p align="center">
-  <img src="figures/time_sync.svg" width="100%" alt="Timeline of 2-D steps, accumulated volume and SWMM sub-steps for interval and step coupling">
+  <img src="figures/time_sync.svg" width="100%" alt="Three-panel model-time diagram: fixed intervals with positive returns released over the following interval; one network exchange per surface step with immediate current-step returns; and equal substeps bounded by the current CFL limit that reach the next target time.">
 </p>
+
+Panel a uses a simulated-time axis: SWMM's substeps for an interval execute after the surface reaches its right boundary. The aligned rows do not imply concurrent execution. $P_s^n$ denotes the return queue just after the exchange at $t_n$; its rate over the next interval is $P_s^n/T_{n+1}$. The first illustrated interval can use an initial or restored queue. Panel b shows current-step return application in every-step mode. Panel c shows target alignment for a positive remaining duration and CFL limit. Bar lengths are illustrative; a constant CFL limit gives equal subdivisions, and the limit is recomputed as the solution changes.
 
 The exchange clock is `SwmmCoupleClock` in `swmm_couple.h`. It is used unchanged by all four drivers:
 
@@ -248,12 +252,14 @@ The exchange clock is `SwmmCoupleClock` in `swmm_couple.h`. It is used unchanged
 
 In interval mode:
 
-- `swmm_couple_clip_dt` shortens the last 2-D step so the interval ends exactly on `T`, or at the end of the 2-D run or the SWMM run, whichever comes first.
+- `coupling_equal_substep` selects `R / ceil(R / dt_CFL)` for remaining time `R` to the next target. The CFL limit is recomputed as the solution changes. This avoids alternating full and very short clipped steps. The accumulated event clock is double precision.
+- Targets include the exchange boundary, rain frames, requested restart and the 2-D/SWMM end time. Rounded rain-frame times within 0.05 s are treated as the same target; NetCDF frame selection uses the same tolerance. Frames follow their time coordinates rather than an assumed hourly cadence.
 - `swmm_couple_write_inflow` passes the interval-mean inflow `V / T` to SWMM. `coupled_sync_inlets` holds this rate constant at both ends of SWMM's trapezoidal lateral-inflow integration, so the volume SWMM receives equals the volume removed from the surface.
 - `swmm_advanceCoupled` caps each SWMM routing step so the network lands exactly on `t + T`, and fails if it does not.
-- Outfall and flooding volumes returned for the interval are applied to the surface in the step that closes the interval.
+- Positive outfall and node-flooding returns are released at a constant rate over the following exchange interval. Pending volume is carried forward until applied. Reverse outfall flow is deducted immediately at the exchange.
+- At the final exchange, any pending positive volume is applied immediately because no following interval exists. It has no further surface-routing period, so an event ending during strong return flow can show a local final-depth or maximum-depth pulse. Extend the recession period and check exchange-interval sensitivity when assessing peaks.
 
-A shorter interval couples the two models more tightly. A longer interval reduces the number of SWMM calls and, on the GPU, the number of host–device transfers.
+A shorter interval couples the two models more tightly. A longer interval reduces the number of SWMM exchange calls but adds return-flow delay. Coupled-cell depths are still gathered for manhole exchange each 2-D step; sparse transfers and a longer interval address different costs.
 
 ## 9. Units
 
@@ -276,23 +282,40 @@ Every coupled run can be checked with the SWMM report (`swmmrpt`, continuity err
 | `<resroot>.audit.log` | run settings, periodic progress lines with the combined residual, and the final state |
 | `<resroot>.water_balance.csv` | time series of 2-D and 1-D storage, rain, inlet and outfall exchange in both directions, pending exchange, and the combined balance residual (m³) |
 
-Coupling entries are signed from the 2-D point of view. Inflow accumulated but not yet passed to SWMM is reported as `pending_to_1d_m3` and included in the combined balance.
+Coupling entries are signed from the 2-D point of view. `pending_to_1d_m3` is surface water removed but not yet delivered to SWMM; `pending_to_2d_m3` is network water returned but not yet applied to the surface. Both belong to the combined system.
+
+For changes from the run's initial state, the combined residual is
+
+$$
+R_{\mathrm{combined}} = \Delta S_{\mathrm{2D}} + \Delta S_{\mathrm{1D}} + \Delta P - E_{\mathrm{2D}} - E_{\mathrm{1D}},
+$$
+
+where \(P=P_{\to\mathrm{1D}}+P_{\to\mathrm{2D}}\) and \(E\) denotes external net input. Native surface and SWMM budgets contain interface transfers, so these transfers are removed before forming the external budgets. An independent `INTERFACE` line checks
+
+$$
+R_{\mathrm{interface}} = C + \Delta P - N,
+$$
+
+where \(C\) is net coupling volume actually applied to the surface and \(N\) is net volume returned by the network, including delivered inlet withdrawals with a negative sign. On restart, `RESTART_BASELINE` includes restored storage and both pending reservoirs; balance totals then describe the resumed segment.
+
+The CSV retains its original 23 columns and appends `pending_to_2d_m3`, `swmm_wall_s` and `coupling_host_wall_s`. Net-rain additions/removals are signed net forcing split by sign, not separate observations of gross rain and infiltration. Timing uses a monotonic wall clock; work outside the measured SWMM and host-coupling sections includes surface computation, transfers and output.
 
 ## 11. Requirements and limitations
 
 - Coupled runs require `acceleration` or `fv1`, on the CPU or with `cuda`. Other solvers, including FV2 and DG2, run standalone only.
 - `coupleint` accepts `step` or a positive interval for all four coupled drivers.
-- Hotstart (`hsfdt`, `hsffloodread`, …) is available for the ACC solver, on the CPU and the GPU. FV1 runs start from `startfile`.
+- Bundled hydraulic restart (`hsfdt`, `hsffloodread`, …) supports ACC and FV1 on CPU and CUDA with the same executable, backend, precision and inputs. It includes both pending reservoirs. See the [user guide](user_guide.md#8-hotstart) for supported SWMM processes and absolute-time usage.
 - The audit files of [§10](#10-water-balance-audit) are written by the CUDA drivers only.
 - A manhole exchanges with exactly one 2-D cell, the cell that contains its coordinates.
 - The `floodconfig` row index is the node's position in the SWMM input file, not its name ([user guide §4](user_guide.md#4-the-floodconfig-table)). Reordering the input file changes the mapping.
-- Hotstart files written by an uncoupled LISFLOOD-FP or SWMM may define pipe storage differently. Rebuild hotstarts with this model.
+- Legacy ACC surface warm starts and surface-only `checkpoint` files do not retain complete coupled state. Rebuild full restart files with the matching public executable.
 
 ## 12. Source map
 
 | Topic | Files |
 |---|---|
 | Exchange clock | `src/swmm_couple.h` |
+| Bundled hydraulic restart | `src/coupling_restart.h`, `src/hydraulic_restart_io.h`, SWMM restart hooks |
 | Receiving-cell volumes, donor limits, exchange volumes | `src/coupled_boundary.c`, `src/coupled_boundary.h` |
 | SWMM coupling API | `src/swmm5.c`, `src/swmm5.h` |
 | Hooks in SWMM routing | `src/dynwave.c`, `src/routing.c`, `src/node.c` |

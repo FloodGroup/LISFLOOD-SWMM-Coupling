@@ -46,7 +46,7 @@ typedef struct vconnect
 	int* dem_yi;         
 	int* flow_type;      
 
-	// Outfalls whose
+	// One-way SWMM outfall-to-2D coupling. Only outfalls whose
 	// coordinates fall on a valid LISFLOOD DEM cell are stored here.
 	int outfall_count;
 	int* outfall_node_Vindex;
@@ -55,4 +55,5 @@ typedef struct vconnect
 	int* outfall_dem_Vindex_uni;
 	unsigned char* outfall_dynamic_stage; // 1 for mapped COUPLED outfalls
 	int dynamic_outfall_count;
+	int* outfall_slot; // Receiving-cell source slot for each mapped outfall.
 }Vconnect;

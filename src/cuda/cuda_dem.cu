@@ -595,6 +595,8 @@ void lis::cuda::Topography::free_vconnect
 	delete[] verlink->outfall_dem_Vindex;
 	delete[] verlink->outfall_dem_Vindex_uni;
 	delete[] verlink->outfall_dynamic_stage;
+	delete[] verlink->outfall_slot;
+	verlink->outfall_slot = nullptr;
 	return;
 }
 
@@ -765,6 +767,7 @@ void lis::cuda::Topography::map_internal_outfalls
 	verlink->outfall_dem_Vindex_uni = nullptr;
 	verlink->outfall_dynamic_stage = nullptr;
 	verlink->dynamic_outfall_count = 0;
+	verlink->outfall_slot = nullptr;
 
 	int total_outfalls = 0;
 	for (int node_index = 0; node_index < Nobjects[NODE]; ++node_index)
@@ -786,6 +789,7 @@ void lis::cuda::Topography::map_internal_outfalls
 	verlink->outfall_dem_Vindex = new int[total_outfalls]();
 	verlink->outfall_dem_Vindex_uni = new int[total_outfalls]();
 	verlink->outfall_dynamic_stage = new unsigned char[total_outfalls]();
+	verlink->outfall_slot = new int[total_outfalls]();
 
 	const double x_min = geometry.blx;
 	const double x_max = geometry.blx + geometry.xsz * geometry.dx;
@@ -845,8 +849,10 @@ void lis::cuda::Topography::map_internal_outfalls
 		}
 		if (unique_index < 0)
 		{
+			unique_index = verlink->outfall_dem_count;
 			verlink->outfall_dem_Vindex_uni[verlink->outfall_dem_count++] = dem_index;
 		}
+		verlink->outfall_slot[outfall_index] = unique_index;
 
 		fprintf(flood_error,
 				"outfall:%-20s mapped to valid DEM cell (%d, %d), index %d\n",
@@ -907,10 +913,9 @@ void lis::cuda::Topography::update_outfall_stages
 	for (int i = 0; i < verlink->outfall_count; ++i)
 	{
 		if (!verlink->outfall_dynamic_stage[i]) continue;
-		int cell = -1;
-		for (int k = 0; k < verlink->outfall_dem_count; ++k)
-			if (verlink->outfall_dem_Vindex_uni[k] == verlink->outfall_dem_Vindex[i]) { cell = k; break; }
-		if (cell < 0) { fprintf(stderr, "missing mapped tailwater cell\n"); exit(EXIT_FAILURE); }
+		// Use the precomputed receiving-cell slot.
+		const int cell = verlink->outfall_slot[i];
+		if (cell < 0 || cell >= verlink->outfall_dem_count) { fprintf(stderr, "missing mapped tailwater cell\n"); exit(EXIT_FAILURE); }
 		const double bed = DEM[verlink->outfall_dem_Vindex[i]];
 		const double depth = outfall_depths[cell];
 		if (!isfinite(bed) || !isfinite(depth) || depth < -1.0e-5)
@@ -976,18 +981,10 @@ void lis::cuda::Topography::collect_outfall_source_values
 		double outfall_flow = swmm_getOutfallExchangeVolume(node_index) / exchange_seconds;
 		if (outfall_flow <= 0.0 && !verlink->outfall_dynamic_stage[i]) continue;
 		// The integrated interface volume is already SI (m3).
-
-		for (int cell = 0; cell < verlink->outfall_dem_count; ++cell)
-		{
-			if (verlink->outfall_dem_Vindex_uni[cell] ==
-					verlink->outfall_dem_Vindex[i])
-			{
-				// LISFLOOD QFIX stores discharge per unit cell width (m2/s).
-				point_source_values[source_offset + cell] +=
-						(NUMERIC_TYPE)(outfall_flow / cell_width);
-				break;
-			}
-		}
+		// LISFLOOD QFIX stores discharge per unit cell width (m2/s).
+		// Use the precomputed receiving-cell slot.
+		point_source_values[source_offset + verlink->outfall_slot[i]] +=
+				(NUMERIC_TYPE)(outfall_flow / cell_width);
 	}
 	// SWMM has already admitted any reverse flow. Stop rather than removing
 	// more water from the 2D river cell than exists and violating mass balance.

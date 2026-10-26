@@ -69,6 +69,7 @@ The executable is `build/src/lisflood`. `CMAKE_CUDA_ARCHITECTURES` is ignored in
 |---|---|---|
 | `-VcVars` | required | path to `vcvars64.bat` |
 | `-CMake` | required | path to `cmake.exe` |
+| `-CudaRoot` | empty | optional CUDA Toolkit directory; sets the compiler and toolkit search paths |
 | `-CudaArchitecture` | `75` | GPU compute capability without the dot; ignored in a CPU build |
 | `-MsvcToolset` | `14.39` | MSVC toolset passed to `vcvars64.bat` |
 | `-RedistDirectory` | empty | if set, the MSVC runtime and OpenMP DLLs are copied next to the executable |
@@ -95,6 +96,14 @@ python tools/test_coupling_smoke.py --exe build/src/lisflood --output build/smok
 On Windows, use the executable in `build/nmake/lisflood.exe`. Add `--cuda` to also check CUDA ACC and FV1. If runtime DLLs are in a separate folder, pass `--runtime-dir <folder>`. The output directory must not already exist.
 
 The script sets four OpenMP threads, runs a wet 60-second coupled example, checks finite nonnegative depth outputs, and checks nonzero GPU exchange and combined water balance. It also tests coincident ACC discharge sources, an out-of-domain point and a missing boundary time series against a known injected volume. Logs and `validation.json` are written under the output directory; the shipped examples are not changed. These are short regressions, not full-event validation. See the [recorded results](validation.md).
+
+For fixed-interval coupling and complete restart, run:
+
+```bash
+python tools/test_coupled_restart.py --exe build/src/lisflood --output build/restart-check --cuda --rain
+```
+
+Omit `--cuda` for CPU-only checks. `--rain` requires the Python `netCDF4` package and an executable built with NetCDF. The fixture uses 16 independent conduits, shared receiving cells and four SWMM threads, saves inside an exchange interval with both pending reservoirs nonzero, then compares resumed and continuous final and maximum depth fields. It also checks every-step coupling and rejects mismatched intervals, solvers, unsupported formats and truncated files.
 
 ## 3. Prepare a coupled case
 
@@ -175,11 +184,11 @@ Rows that point to an outfall, storage unit or divider, lie outside the DEM, or 
 | `swmmout` | file | | SWMM binary results file |
 | `flooderror` | file | | log of node and outfall mapping decisions |
 | `coupleint` | `step` or seconds | | exchange after every 2-D step (`step`), or every *T* seconds |
-| `hsfdt` | seconds | | time at which to write hotstart files (ACC only, [§8](#8-hotstart)) |
-| `hsfswmmtemp` | file | | SWMM hotstart written at `hsfdt` |
-| `hsffloodtemp` | file | | 2-D hotstart written at `hsfdt` |
-| `hsffloodend` | file | | 2-D hotstart written at the end of the run |
-| `hsffloodread` | file | | 2-D hotstart to start from |
+| `hsfdt` | seconds | | absolute event time at which to write a restart ([§8](#8-hotstart)) |
+| `hsfswmmtemp` | file | | optional legacy SWMM warm start; does not replace bundled restart |
+| `hsffloodtemp` | file | | bundled surface, SWMM and coupler restart written at `hsfdt` |
+| `hsffloodend` | file | | bundled restart written at the end of the run |
+| `hsffloodread` | file | | bundled restart to resume; ACC also reads legacy surface warm starts |
 
 Leaving out both `swmminp` and `floodconfig` gives a standalone LISFLOOD-FP run.
 
@@ -234,12 +243,15 @@ lisflood case.par
 On Windows the binary package includes `run.ps1`, which runs the `lisflood.exe` next to it:
 
 ```powershell
-.\run.ps1 path\to\case.par
+Set-Location path\to\case
+& C:\path\to\package\run.ps1 .\case.par
 ```
 
-At start-up the console prints `LISFLOOD-SWMM | numeric=… | built=…` and the coupling interval (`SWMM coupling interval: step` or `… : 30.000 s`); a GPU run also prints `Using CUDA device: …`. A GPU run ends with a line beginning `END state=`, which gives the final state and the simulated time; the same line is written to `<resroot>.audit.log`.
+At start-up the console prints `LISFLOOD-SWMM 1.3.0 | numeric=… | … | built=…` and the coupling interval (`SWMM coupling interval: step` or `… : 30.000 s`); a GPU run also prints `Using CUDA device: …`. A GPU run ends with a line beginning `END state=`, which gives the final state and the simulated time; the same line is written to `<resroot>.audit.log`.
 
 On the CPU, set the number of OpenMP threads with the `OMP_NUM_THREADS` environment variable.
+
+SWMM's `[OPTIONS] THREADS` controls its dynamic-wave solver when the C sources are built with OpenMP. SWMM may reduce this count for small networks; check the reported thread count. Timing summaries measure the 2-D loop, SWMM and selected host coupling work. The unassigned time includes surface computation, transfers and I/O, and is not a pure GPU timing.
 
 ## 7. Outputs
 
@@ -250,6 +262,7 @@ On the CPU, set the number of OpenMP threads with the `OMP_NUM_THREADS` environm
 | `dirroot/resroot.mass` | LISFLOOD-FP | surface mass balance at every `massint` |
 | `dirroot/resroot.audit.log` | coupler, GPU runs | run settings, progress, coupled balance residual |
 | `dirroot/resroot.water_balance.csv` | coupler, GPU runs | 2-D and 1-D storage and every exchange term over time (m³) |
+| `dirroot/resroot.status` | coupler, GPU runs | current or final state and simulation time; an interrupted process may leave `RUNNING` |
 | `swmmrpt` | SWMM | standard SWMM report, including its continuity errors |
 | `swmmout` | SWMM | binary time series, readable by SWMM GUI and `swmm-toolkit` |
 | `flooderror` | coupler | which nodes and outfalls were mapped to which cells, and why others were skipped |
@@ -258,12 +271,32 @@ The columns of `water_balance.csv` are described in [methodology §10](coupling_
 
 ## 8. Hotstart
 
-Hotstart is available for the ACC solver, on the CPU and the GPU. FV1 runs always start from `startfile`.
+Bundled hydraulic restart is available for ACC and FV1 on CPU and CUDA. One file retains surface fields and maxima, SWMM hydraulic state and flow-area history, the precise event time, exchange progress, pending inlet and return volumes, and return rates.
 
-1. In the first run, set `hsfdt`, `hsfswmmtemp` and `hsffloodtemp` (or `hsffloodend`).
-2. In the next run, start the surface from the saved state with `hsffloodread`. Start SWMM from its saved state with a `USE HOTSTART` line in the SWMM `[FILES]` section.
+To save at 5.25 seconds during a 12-second event:
 
-Hotstart files written by an uncoupled LISFLOOD-FP or SWMM may attribute pipe storage differently. Regenerate them with this model.
+```text
+sim_time       12
+coupleint      2
+hsfdt          5.25
+hsffloodtemp   saved.hsf
+```
+
+To resume, use a separate output directory and retain the original event's absolute time axis:
+
+```text
+sim_time       12
+coupleint      2
+hsffloodread   saved.hsf
+```
+
+The resumed run continues from 5.25 to 12 seconds. `sim_time` is the absolute event end, not an additional duration. Keep the same executable, solver/backend, precision, grid, node mapping, exchange mode and interval, network parameters, rainfall and boundary inputs. A bundled file already contains SWMM state; a separate `[FILES] USE HOTSTART` is unnecessary. The format signature is `LFSWMH01`; it is not portable across solver/backend, operating system or binary ABI.
+
+`hsffloodend` saves the end state. To continue beyond it, both the 2-D and SWMM end times must extend past the saved time. Preserve all earlier forcing timestamps. Maximum-depth fields retain their pre-restart maxima. Restart audit budgets start from the restored storage and pending-water baseline; keep the original run's outputs for the earlier segment.
+
+**Supported scope.** Complete restart covers SWMM hydraulic routing with 2-D rainfall and infiltration. It rejects SWMM runoff, RDII, storage exfiltration, routing-interface input, events and active water-quality routing before a requested bundled save or restore. These restrictions do not apply to continuous runs that do not request bundled restart. The file checks grid, mapping and exchange settings, but does not fingerprint every input value; preserving the full input configuration remains the user's responsibility.
+
+**Legacy mechanisms.** ACC can still read legacy surface warm starts, and `hsfswmmtemp` can write a conventional SWMM warm start. Neither retains the complete coupling reservoirs. The separate `checkpoint` mechanism remains surface-only and cannot substitute for `hsffloodtemp` / `hsffloodread` when complete coupled recovery is required. Regenerate full restart files with the matching public executable.
 
 ## 9. Troubleshooting
 
@@ -280,6 +313,8 @@ Hotstart files written by an uncoupled LISFLOOD-FP or SWMM may attribute pipe st
 | `node … volume equation failed` | node volume equation missed its tolerance | reduce SWMM `ROUTING_STEP` |
 | `SWMM nonfinite state node=…` | SWMM produced NaN or Inf at a node | check that node's geometry and offsets; reduce `ROUTING_STEP` |
 | `remove swmmriveroutfalls` | parameter from an older version | delete the line; `COUPLED` outfalls are read from the SWMM input |
+| `Restart … do not match`, `Incomplete coupled restart file` | incompatible configuration or incomplete file | use the matching executable and inputs, or regenerate the restart |
+| `Coupled hydraulic restart requires …` | unsupported SWMM process requested for full restart | use a supported hydraulic-only configuration or run continuously |
 
 If a run behaves unexpectedly but does not stop, check the `flooderror` log first. Most problems come from nodes that were not mapped to the cells you expected.
 

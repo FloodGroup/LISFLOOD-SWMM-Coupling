@@ -441,7 +441,15 @@ inline bool swmm_coupling_enabled(const Fnames* filenames)
 
 //-------------------------------------------
 // Boundary Conditions
-// point-boundary (P/F lines of the .bci) limit and name slot length.
+inline bool coupling_restart_file(const char* path) {
+    if (!path || !path[0]) return false;
+    FILE* f=fopen(path,"rb");
+    if(!f) return false;
+    char magic[8]={};
+    bool yes=fread(magic,1,8,f)==8 && memcmp(magic,"LFSWMH01",8)==0;
+    fclose(f); return yes;
+}
+// Point-boundary capacity and time-series name length.
 #define LISFLOOD_MAX_POINT_BOUNDARIES 200000
 #define LISFLOOD_BC_NAME_LEN 80
 struct BoundCs{
@@ -502,6 +510,9 @@ struct SGCprams{
 	NUMERIC_TYPE *SGCn;
 	NUMERIC_TYPE *SGCgamma, *SGCbeta1, *SGCbeta2, *SGCbeta3, *SGCbeta4, *SGCbeta5;
 };
+
+// Tolerance in seconds for rounded dynamic-rain frame times.
+#define RAIN_FRAME_TIME_TOL 0.05
 
 struct NetCDFVariable
 {
@@ -1030,7 +1041,7 @@ void write_ascfile_SGCf(char *root, int SaveNumber, char *extension, NUMERIC_TYP
 void write_binrasterfile_SGCf(char *root, int SaveNumber, char *extension, NUMERIC_TYPE *data, NUMERIC_TYPE *SGC_BankFullHeight_grid, States *, Pars *); // specific routine for SGC floodplain depth export binary
 void write_profile(char *root, int SaveNumber, char *extension, States *Statesptr, ChannelSegmentType *ChannelSegments, Arrays *Arrptr, Pars *Parptr, vector<int> *, int *RiversIndexPtr); // write river channel profiles 
 void debugfileoutput(Fnames *, States *, Pars *, Arrays *); // Debug option file output (currently the modified DEM and the channel and trib masks
-void printversion(int verbose); // output program version header
+void printversion(int verbose); // output program header
 int fexist(char *filename); // check if file exists
 
 // TRENT functions

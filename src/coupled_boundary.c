@@ -12,6 +12,7 @@
 #include <float.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "hydraulic_restart_io.h"
 
 extern TRoutingTotals FlowTotals, StepFlowTotals;
 typedef struct {
@@ -34,11 +35,41 @@ static double* LinkEvapPrevious;
 static double* LinkSeepPrevious;
 static int SIInlets;
 static double RemainingInterval;
+/* Receiving-cell lookup: open addressing, 0 = empty, otherwise CC index + 1. */
+static int* CellHash;
+static int CellHashMask;
 
 static int parent(int* p, int i)
 {
     while (p[i] != i) { p[i] = p[p[i]]; i = p[i]; }
     return i;
+}
+
+int coupled_restart(void* stream, int reading)
+{
+    FILE* f=(FILE*)stream;
+    int active=Active, n=NC, g;
+    HR_VALUE(active);
+    if(active!=Active) return 1;
+    HR_VALUE(SIInlets); HR_VALUE(RemainingInterval);
+    HR_ARRAY(InletPrevious,Nobjects[NODE]);
+    if(!Active) return 0;
+    HR_VALUE(n);
+    if(n<0 || n>Nobjects[NODE]) return 1;
+    NC=n;
+    HR_ARRAY(CN,Nobjects[NODE]); HR_ARRAY(CC,NC);
+    HR_ARRAY(LinkEvapPrevious,Nobjects[LINK]); HR_ARRAY(LinkSeepPrevious,Nobjects[LINK]);
+    if(reading)
+    {
+        memset(CellHash,0,((size_t)CellHashMask+1)*sizeof(int));
+        for(g=0;g<NC;++g)
+        {
+            unsigned int h=((unsigned int)CC[g].id*2654435761u)&(unsigned int)CellHashMask;
+            while(CellHash[h]) h=(h+1)&(unsigned int)CellHashMask;
+            CellHash[h]=g+1;
+        }
+    }
+    return 0;
 }
 
 static double end_area(int link, double head, int side)
@@ -102,6 +133,20 @@ static double node_volume(int n, double head)
     return own_volume(n, head) + end_volume(n, head);
 }
 
+static int cell_group(int cell)
+{
+    unsigned int h = ((unsigned int)cell * 2654435761u) & (unsigned int)CellHashMask;
+    while (CellHash[h])
+    {
+        if (CC[CellHash[h]-1].id == cell) return CellHash[h]-1;
+        h = (h + 1) & (unsigned int)CellHashMask;
+    }
+    if (NC >= Nobjects[NODE]) return -1;
+    CC[NC].id = cell; CC[NC].first = CC[NC].last = -1;
+    CellHash[h] = NC + 1;
+    return NC++;
+}
+
 static double cell_volume(int g, double head)
 {
     return CC[g].area * MAX(0.0, head - CC[g].bed);
@@ -109,14 +154,7 @@ static double cell_volume(int g, double head)
 
 static double inverse_volume(int n, int g, double v, double lo, double hi)
 {
-    /* Use the same volume equation and tolerance as the previous implementation. Changes:
-     * (1) a Newton step that does not at least halve the volume residual is
-     *     replaced by bisection of the bracket, so the bracket always shrinks
-     *     (near a conduit-offset kink of a nearly dry node the forward-difference
-     *     slope belongs to the steep side and Newton crept by ~1e-11 ft/iteration);
-     * (2) on exit the iterate with the smallest residual is returned instead of
-     *     the bracket midpoint (which could be the midpoint of the initial
-     *     bracket, i.e. several metres away from the root). */
+    /* Bisect stalled Newton steps and retain the iterate with least residual. */
     int i;
     double x, best_x, best_r = HUGE_VAL, prev_r = HUGE_VAL;
     if (v <= 0.0) return lo;
@@ -164,11 +202,14 @@ int coupled_open(void)
     CN = (CNode*)calloc(Nobjects[NODE], sizeof(CNode));
     CP = (CPort*)calloc(MAX(1, 2*Nobjects[LINK]), sizeof(CPort));
     CC = (CCell*)calloc(Nobjects[NODE], sizeof(CCell));
+    for (CellHashMask = 1; CellHashMask < 2*Nobjects[NODE]+1; CellHashMask <<= 1);
+    CellHash = (int*)calloc(CellHashMask, sizeof(int));
+    CellHashMask -= 1;
     LinkEvapPrevious=(double*)calloc(MAX(1,Nobjects[LINK]),sizeof(double));
     LinkSeepPrevious=(double*)calloc(MAX(1,Nobjects[LINK]),sizeof(double));
     parents = (int*)malloc(Nobjects[NODE]*sizeof(int));
     marks = (int*)calloc(Nobjects[NODE], sizeof(int));
-    if (!CN || !CP || !CC || !InletPrevious || !parents || !marks || !LinkEvapPrevious || !LinkSeepPrevious)
+    if (!CN || !CP || !CC || !CellHash || !InletPrevious || !parents || !marks || !LinkEvapPrevious || !LinkSeepPrevious)
     { FREE(parents); FREE(marks); coupled_close(); ErrorCode = ERR_MEMORY; return ErrorCode; }
     for (i = 0; i < Nobjects[NODE]; ++i)
     { parents[i] = i; CN[i].first = -1; CN[i].group = -1; }
@@ -203,19 +244,15 @@ int coupled_open(void)
             Conduit[Link[l].subIndex].barrels *
             ((Node[i].type == OUTFALL ? 0.0 : (Node[k].type == OUTFALL ? 1.0 : 0.5))*end_area(l, Node[i].invertElev+Node[i].newDepth,0) +
              (Node[k].type == OUTFALL ? 0.0 : (Node[i].type == OUTFALL ? 1.0 : 0.5))*end_area(l, Node[k].invertElev+Node[k].newDepth,1));
-        /* Conduit.a1/a2 stay SWMM's mid-length flow areas (set by the
-         * link initialisation and by dwflow). dwflow uses a2 as the previous
-         * step's mid area in the inertial term 2*v*(aMid-aOld); replacing it
-         * by the mean of the end areas made that term non-zero in steady
-         * flow and drove an exponential growth of the conduit flow. */
+        /* Preserve midpoint flow-area history used by dwflow's inertial term. */
     }
     FREE(parents); FREE(marks);
     return 0;
 }
 
 void coupled_close(void)
-{ FREE(CN); FREE(CP); FREE(CC); FREE(InletPrevious); FREE(LinkEvapPrevious); FREE(LinkSeepPrevious);
-  NC = 0; Active = 0; SIInlets = 0; RemainingInterval=0.0; }
+{ FREE(CN); FREE(CP); FREE(CC); FREE(CellHash); FREE(InletPrevious); FREE(LinkEvapPrevious); FREE(LinkSeepPrevious);
+  NC = 0; CellHashMask = 0; Active = 0; SIInlets = 0; RemainingInterval=0.0; }
 void coupled_si_inlets(int enabled) { SIInlets=enabled; }
 void coupled_remaining_interval(double seconds) { RemainingInterval=seconds; }
 double coupled_inlet_factor(void) { return SIInlets ? 0.028316846592 : UCF(FLOW); }
@@ -244,8 +281,8 @@ int coupled_set_cell(int n, int cell, double bed, double depth, double area)
     int g, i;
     if (!coupled_outfall(n) || cell < 0 || !isfinite(bed) || !isfinite(depth) ||
         !isfinite(area) || depth < -1.e-9 || area <= 0.0) return 1;
-    for (g = 0; g < NC; ++g) if (CC[g].id == cell) break;
-    if (g == NC) { ++NC; CC[g].id = cell; CC[g].first=CC[g].last=-1; }
+    g = cell_group(cell);
+    if (g < 0) return 1;
     if (CN[n].group >= 0 && CN[n].group != g) return 1;
     if (CN[n].group < 0)
     {
@@ -443,7 +480,7 @@ void coupled_limit_flows(double dt)
 
 int coupled_commit(double dt)
 {
-    int n, l, g;
+    int n, l, g, bad;
     double tolerance = 1.e-7; /* ft3 absolute + relative below */
     if (!Active) return 0;
     for (g = 0; g < NC; ++g)
@@ -458,6 +495,9 @@ int coupled_commit(double dt)
             ErrorCode = ERR_TIMESTEP; return ErrorCode;
         }
     }
+    /* Each thread owns its node/link state; report errors in node order. */
+    bad = Nobjects[NODE];
+#pragma omp parallel for schedule(dynamic, 64) num_threads(NumThreads)
     for (n = 0; n < Nobjects[NODE]; ++n)
     {
         if (!CN[n].marked) continue;
@@ -467,8 +507,8 @@ int coupled_commit(double dt)
             double actual=node_volume(n,Node[n].invertElev+Node[n].newDepth);
             if (!isfinite(actual) || !isfinite(target) || fabs(actual-target)>1.e-6+1.e-8*MAX(1.0,fabs(target)))
             {
-                fprintf(stderr,"node %s volume equation failed (%.9g m3); reduce ROUTING_STEP.\n",Node[n].ID,(actual-target)*0.028316846592);
-                ErrorCode=ERR_TIMESTEP; return ErrorCode;
+#pragma omp critical (coupled_commit_bad)
+                { if (n < bad) bad = n; }
             }
         }
         if (Node[n].type == OUTFALL)
@@ -483,6 +523,14 @@ int coupled_commit(double dt)
             CN[n].oldNet = q;
         }
     }
+    if (bad < Nobjects[NODE])
+    {
+        double target=CN[bad].oldVolume+dt*(Node[bad].inflow-Node[bad].outflow-Node[bad].overflow);
+        double actual=node_volume(bad,Node[bad].invertElev+Node[bad].newDepth);
+        fprintf(stderr,"node %s volume equation failed (%.9g m3); reduce ROUTING_STEP.\n",Node[bad].ID,(actual-target)*0.028316846592);
+        ErrorCode=ERR_TIMESTEP; return ErrorCode;
+    }
+#pragma omp parallel for schedule(dynamic, 64) num_threads(NumThreads)
     for (l = 0; l < Nobjects[LINK]; ++l)
     {
         int n1 = Link[l].node1, n2 = Link[l].node2;
@@ -490,7 +538,7 @@ int coupled_commit(double dt)
         Link[l].newVolume = link_getLength(l)*Conduit[Link[l].subIndex].barrels*
             ((Node[n1].type == OUTFALL ? 0.0 : (Node[n2].type == OUTFALL ? 1.0 : 0.5))*end_area(l,Node[n1].invertElev+Node[n1].newDepth,0)+
              (Node[n2].type == OUTFALL ? 0.0 : (Node[n1].type == OUTFALL ? 1.0 : 0.5))*end_area(l,Node[n2].invertElev+Node[n2].newDepth,1));
-        /* keep Conduit.a1 = dwflow's mid area (see coupled_open). */
+        /* Keep the midpoint flow area maintained by dwflow. */
     }
     return 0;
 }

@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <cfloat>
 #include <vector>
+#include <chrono>
 #include "stats.h"
 #include "../../rain/Rainfall_uniform.h"
 #include "cuda_boundary.cuh"
@@ -25,6 +26,7 @@ extern "C" {
 };
 #include "../swmm5.h"
 #include "../../swmm_couple.h"
+#include "../../coupling_restart.h"
 #include "../run_audit.cuh"
 
 //#include "../acc_nugrid/CHECK_CUDA_ERROR.cuh" // use for debug
@@ -41,19 +43,19 @@ void lis::cuda::acc::Simulation::run
 	print_device_info();
 	dim3 grid_size(128, 128);
 
-	Geometry geometry; 
+	Geometry geometry;
 	int pitch = 0;
 	int offset = 0;
 
 	NUMERIC_TYPE* DEM = Topography::load(filenames.demfilename, geometry,
-			pitch, offset, pars.nodata_elevation, states.acceleration, verbose); 
-	
+			pitch, offset, pars.nodata_elevation, states.acceleration, verbose);
+
 	//CHECK_CUDA_ERROR(cuda::peek());
 	//CHECK_CUDA_ERROR(cuda::sync());
 
-	update_geometry(pars, geometry); 
+	update_geometry(pars, geometry);
 
-	cuda::copy_to_symbol(cuda::geometry, &geometry, sizeof(Geometry)); 
+	cuda::copy_to_symbol(cuda::geometry, &geometry, sizeof(Geometry));
 
 	cuda::copy_to_symbol(cuda::pitch, &pitch, sizeof(int));
 
@@ -74,36 +76,36 @@ void lis::cuda::acc::Simulation::run
 			fprintf(stderr, "ERROR: unable to initialise SWMM coupling.\n");
 			swmm_close();
 			delete[] DEM;
-			return;
+			throw std::runtime_error("Unable to initialise SWMM coupling; see the SWMM report");
 		}
 
 		lis::cuda::Topography::load_floodconfig(filenames, verlink, geometry,
 				DEM, pars.nodata_elevation, verbose);
 	}
 
-	NUMERIC_TYPE* d_DEM = GhostRaster::allocate_device_H(geometry); 
+	NUMERIC_TYPE* d_DEM = GhostRaster::allocate_device_H(geometry);
 
 	GhostRaster::copy_H(d_DEM, DEM, geometry);
 
 //	cuda::sync();
 
-    ::DynamicRain<cuda::UnifiedAllocator<NUMERIC_TYPE>> rain( 
+    ::DynamicRain<cuda::UnifiedAllocator<NUMERIC_TYPE>> rain(
 			filenames.dynamicrainfilename, verbose);
 	rain.validate_end(solver.Sim_Time);
 
 	cuda::copy_to_symbol(cuda::rain_geometry, &rain.geometry(), sizeof(Geometry));
 
 	acc::Flow U;
-	
+
 	acc::Flow::allocate_pinned(U, geometry);
-	initialise_H(U.H, filenames.startfilename, states, DEM, 
+	initialise_H(U.H, filenames.startfilename, states, DEM,
 			geometry, pitch, offset, verbose);
 
 	nullify_max(U.maxHtm, U.initHtm, U.totalHtm, geometry, pitch, offset, verbose);
 
 	NUMERIC_TYPE* manning = nullptr;
 	NUMERIC_TYPE* d_manning = nullptr;
-	if (strlen(filenames.nfilename) > 0) 
+	if (strlen(filenames.nfilename) > 0)
 	{
 		manning = lis::GhostRaster::allocate_H(geometry);
 		initialise_manning(manning, filenames.nfilename, geometry,
@@ -121,7 +123,7 @@ void lis::cuda::acc::Simulation::run
 //	MaxField max_field(filenames.resrootname, geometry, pitch, offset,
 //		grid_size, states.acceleration, pars.output_precision);
 
-	
+
 
 	StatsCollector stats_collector(geometry, solver.DepthThresh, states.acceleration);
 
@@ -129,26 +131,26 @@ void lis::cuda::acc::Simulation::run
 	//Load checkpointed data if this job has been restarted
 	if (states.checkpoint == ON)
 	{
-		
+
 		read_checkpoint(filenames, states, pars, solver,
 			U.H, U.Qx, U.Qy, U.maxH, U.totalHtm, U.maxHtm, U.initHtm, stats_collector, verbose);
 
 		if (verbose == ON) printf(" - checkpoint output file: %s\n", filenames.checkpointfilename);
 	}
 
-	if (strlen(filenames.hsffloodread) != 0)
+	if (strlen(filenames.hsffloodread) != 0 && !coupling_restart_file(filenames.hsffloodread))
 	{
 		read_hsfflood(filenames.hsffloodread, pars, U.H, U.Qx, U.Qy, verbose);
 		if (verbose == ON) printf("hsfflood read done!\n");
 	}
 
 
-	PhysicalParams physical_params(pars, solver); 
+	PhysicalParams physical_params(pars, solver);
 
 	cuda::copy_to_symbol(cuda::physical_params, &physical_params,
 			sizeof(PhysicalParams));
 
-	SolverParams solver_params(pars, solver, states); 
+	SolverParams solver_params(pars, solver, states);
 
 	cuda::copy_to_symbol(cuda::solver_params, &solver_params,
 			sizeof(SolverParams));
@@ -172,7 +174,7 @@ void lis::cuda::acc::Simulation::run
 	boundCsptr->ypi = temp_ypi;
 	boundCsptr->PS_Val = temp_PS_Val;
 	*/
-	
+
 
 	if (swmm_coupled)
 	{
@@ -184,14 +186,14 @@ void lis::cuda::acc::Simulation::run
 	//--------------------------------------------------------------------
 
 
-	//cuda::Boundary::initialise(cuda::boundaries, boundCs, pitch, offset); 
+	//cuda::Boundary::initialise(cuda::boundaries, boundCs, pitch, offset);
 
-	auto solve = unique_ptr<cuda::Solver<Flow>>(new Solver( 
+	auto solve = unique_ptr<cuda::Solver<Flow>>(new Solver(
 				U, d_DEM, d_manning, geometry,
-				physical_params, grid_size));				
+				physical_params, grid_size));
 
-	DynamicTimestepACC<acc::Flow> dynamic_dt(cuda::dt, geometry, solver.InitTstep, 
-			states.adaptive_ts, *solve); 
+	DynamicTimestepACC<acc::Flow> dynamic_dt(cuda::dt, geometry, solver.InitTstep,
+			states.adaptive_ts, *solve);
 
 
 	//start simulation
@@ -244,12 +246,12 @@ void lis::cuda::acc::Simulation::run
 		snapshot.enable_discharge_writer();
 	}
 
-	Flow& d_U = solve->d_U(); 
+	Flow& d_U = solve->d_U();
 	stats_collector.initialise_volume(d_U.H);
 	RunAudit audit(filenames.resrootname,"CUDA_ACC",swmm_coupled,stats_collector.previous_volume,solver.Sim_Time);
 
 	//--------------------------------------------------------------------------------------
-	
+
 	BoundaryConditions temp_BC;
 
 	temp_BC.time_series_count = boundCs.allTimeSeries.size();
@@ -257,9 +259,7 @@ void lis::cuda::acc::Simulation::run
 	temp_BC.all_time_series = static_cast<TimeSeries*>(cuda::malloc_device(
 		temp_BC.time_series_count * sizeof(TimeSeries)));
 
-	// all .bdy series are stored in two contiguous device buffers (the previous implementation made
-	// two cudaMalloc calls per series, i.e. 400000 allocations for 200000 point
-	// series). Series values and the per-series layout are unchanged.
+	// Store boundary time series in contiguous device buffers.
 	size_t ts_total = 0;
 	for (int i = 0; i < temp_BC.time_series_count; i++)
 		ts_total += (size_t)boundCs.allTimeSeries[i].count;
@@ -271,10 +271,10 @@ void lis::cuda::acc::Simulation::run
 		std::vector<NUMERIC_TYPE> h_ts_time(ts_total), h_ts_value(ts_total);
 		TimeSeries* temp_all_time_series1 = new TimeSeries[temp_BC.time_series_count]();
 		size_t ts_offset = 0;
-	for (int i = 0; i < temp_BC.time_series_count; i++)
-	{
+		for (int i = 0; i < temp_BC.time_series_count; i++)
+		{
 			const int count = boundCs.allTimeSeries[i].count;
-		temp_all_time_series1[i].count = count;
+			temp_all_time_series1[i].count = count;
 			temp_all_time_series1[i].time = d_ts_time + ts_offset;
 			temp_all_time_series1[i].value = d_ts_value + ts_offset;
 			temp_all_time_series1[i].current_value = C(0.0);
@@ -285,9 +285,9 @@ void lis::cuda::acc::Simulation::run
 		}
 		cuda::copy(d_ts_time, h_ts_time.data(), ts_total * sizeof(NUMERIC_TYPE));
 		cuda::copy(d_ts_value, h_ts_value.data(), ts_total * sizeof(NUMERIC_TYPE));
-	cuda::copy(temp_BC.all_time_series, temp_all_time_series1,
-		temp_BC.time_series_count * sizeof(TimeSeries));
-	delete[] temp_all_time_series1;
+		cuda::copy(temp_BC.all_time_series, temp_all_time_series1,
+			temp_BC.time_series_count * sizeof(TimeSeries));
+		delete[] temp_all_time_series1;
 	}
 	//--------------------------------------------------------------------------------------
 	//lis::cuda::Boundary::initialise_all_time_series(temp_BC, &boundCs);
@@ -309,7 +309,7 @@ void lis::cuda::acc::Simulation::run
 	{
 		if (boundCs.BC_Ident[bc_i] == HVAR3 || boundCs.BC_Ident[bc_i] == QVAR5)
 		{
-			// hash lookup of the series (same pointer-identity match as the previous implementation)
+			// Resolve the series through its pointer lookup.
 			::TimeSeries* target = boundCs.BC_TimeSeries[bc_i];
 			std::unordered_map<const NUMERIC_TYPE*, int>::const_iterator f =
 				target != nullptr ? ts_index_by_value.find(target->value) : ts_index_by_value.end();
@@ -394,12 +394,12 @@ void lis::cuda::acc::Simulation::run
 		{
 			if (boundCs.PS_Ident[ps_i] == HVAR3 || boundCs.PS_Ident[ps_i] == QVAR5)
 			{
-				// hash lookup (the previous implementation scanned all series for every point)
+				// Resolve the series through its pointer lookup.
 				::TimeSeries* target = boundCs.PS_TimeSeries[ps_i];
 				std::unordered_map<const NUMERIC_TYPE*, int>::const_iterator f =
 					target != nullptr ? ts_index_by_value.find(target->value) : ts_index_by_value.end();
 				if (f == ts_index_by_value.end())
-					{
+				{
 					fprintf(stderr, "ERROR: point boundary %d has no time series on the GPU.\n", ps_i + 1);
 					exit(EXIT_FAILURE);
 				}
@@ -445,45 +445,77 @@ void lis::cuda::acc::Simulation::run
 	temp_BC.coupling_start = temp_numPS_acc;
 	temp_BC.outfall_start = outfall_source_start;
 	cuda::copy_to_symbol(cuda::boundaries, &temp_BC, sizeof(BoundaryConditions));
-	// launch sizes of the boundary kernels follow the real counts
+	// Size boundary launches to the actual entry counts.
 	cuda::Boundary::set_launch_counts(temp_BC.time_series_count, temp_BC.BC_count, temp_BC.PS_count);
 	if (verbose == ON) printf("GPU boundaries: %d bdy series (%zu values), %d edge cells, %d point sources (%d from bci, %d coupling)\n",
 		temp_BC.time_series_count, ts_total, temp_BC.BC_count, temp_BC.PS_count, temp_numPS_acc, coupling_count);
 
 	//NUMERIC_TYPE dt_cpu = 0.0;
 
-	time_t loop_start;                                                          
+	time_t loop_start;
 	time(&loop_start);
+    const auto precise_loop_start=std::chrono::steady_clock::now();
 	int countnum = 0;
 	SwmmCoupleClock couple_clock;
 	swmm_couple_clock_init(&couple_clock,
 			!swmm_coupled || pars.swmm_couple_every_step,
 			(double)pars.swmm_coupleint,
 			swmm_coupled ? verlink->count_index : 0);
-	while (solver.t < solver.Sim_Time
+	// Queue positive returns for the next fixed exchange interval.
+	SwmmReturnSpread return_spread;
+	swmm_return_init(&return_spread,
+			swmm_coupled && !couple_clock.every_step ? coupling_count : 0);
+	// Accumulate time in double; solver.t is a rounded copy.
+	double t_exact = (double)solver.t;
+	double swmm_wall = 0.0, couple_wall = 0.0;
+	if (swmm_coupled)
+		printf("SWMM exchange %s, SWMM threads %d\n",
+			couple_clock.every_step ? "every 2D step" : "fixed interval (equal sub-steps, returns spread over the next interval)",
+			swmm_getNumThreads());
+	audit.settings(swmm_coupled ? swmm_getNumThreads() : 0,
+			swmm_coupled ? (couple_clock.every_step ? -1.0 : couple_clock.interval) : 0.0);
+
+    if(swmm_coupled && (filenames.hsffloodtemp[0] || filenames.hsffloodend[0] || coupling_restart_file(filenames.hsffloodread)) &&
+        !swmm_hydraulicRestartSupported())
+        throw std::runtime_error("Hydraulic restart is unavailable with SWMM runoff, RDII, storage exfiltration, routing-interface input, events or active quality routing");
+    const std::size_t elements=lis::GhostRaster::elements_H(geometry);
+    const std::size_t faces=lis::GhostRaster::elements_Q(geometry);
+    const std::vector<CouplingRestartField> restart_fields={{"H",U.H,elements},{"Qx",U.Qx,faces},{"Qy",U.Qy,faces},
+        {"Qxold",U.Qxold,faces},{"Qyold",U.Qyold,faces},{"maxH",U.maxH,elements},
+        {"maxHtm",U.maxHtm,elements},{"initHtm",U.initHtm,elements},{"totalHtm",U.totalHtm,elements}};
+    if(coupling_restart_file(filenames.hsffloodread)) {
+        coupling_restart_io(filenames.hsffloodread,true,3,pars,solver,verlink,swmm_coupled,
+            couple_clock,return_spread,t_exact,restart_fields);
+        Flow::copy(d_U,U,geometry);
+
+        stats.next_save=pars.MassTotal; snapshot.next_save=pars.SaveTotal; snapshot.counter=pars.SaveNo;
+        stats_collector.initialise_volume(d_U.H);
+        audit.restart_baseline(stats_collector.previous_volume,
+            coupling_pending_in(couple_clock)+swmm_return_pending(&return_spread));
+    }
+    auto save_restart=[&](const char* path) {
+        snapshot.wait(); cuda::sync(); Flow::copy(U,d_U,geometry);
+
+        pars.SaveTotal=snapshot.next_save; pars.SaveNo=snapshot.counter; pars.MassTotal=stats.next_save;
+        coupling_restart_io(path,false,3,pars,solver,verlink,swmm_coupled,
+            couple_clock,return_spread,t_exact,restart_fields);
+    };
+
+
+	while (t_exact < (double)solver.Sim_Time-1.e-9
 			&& (!swmm_coupled
 					|| (NewRoutingTime < TotalDuration && !ErrorCode)))
-	{		
+	{
 		//---------------------------------------------------------------------------------------------------------------------
 		dynamic_dt.update_dt_ACC();
-		cuda::dt = rain.clip_step(solver.t, FMIN(cuda::dt, solver.Sim_Time-solver.t));
-		if (swmm_coupled && !couple_clock.every_step)
-		{
-			const double swmm_end = TotalDuration / 1000.0;
-			cuda::dt = (NUMERIC_TYPE)swmm_couple_clip_dt(&couple_clock,
-					solver.t, cuda::dt, solver.Sim_Time, swmm_end);
-			if (cuda::dt <= C(0.0)) break;
-		}
 
-		if (swmm_coupled)
-		{
-			cuda::dt = FMIN(cuda::dt, solver.Sim_Time - solver.t);
-			if (couple_clock.every_step)
-				cuda::dt = FMIN(cuda::dt, (NUMERIC_TYPE)((TotalDuration - NewRoutingTime)/1000.0));
-			if (cuda::dt <= C(0.0)) break;
-		}
+        cuda::dt=(NUMERIC_TYPE)coupling_step(couple_clock,swmm_coupled,t_exact,
+            (double)cuda::dt,(double)solver.Sim_Time,NewRoutingTime/1000.0,
+            TotalDuration/1000.0,rain.time_to_next_frame(t_exact),
+            countnum?0.0:(double)pars.hsfdt);
+        if(cuda::dt<=C(0.0)) break;
 
-		// Net rain/infiltration is applied before the inlet budget.
+		// Actual net rain/infiltration is applied before the inlet budget.
 		stats_collector.zero_instantaneous_mass();
 		if (rain.enabled()) {
 			rain.update_time(solver.t);
@@ -509,6 +541,7 @@ void lis::cuda::acc::Simulation::run
 			memset(verlink->flow_2D_node, 0, verlink->count_index * sizeof(double));
 			memset(Node_Inflow, 0, Nobjects[NODE] * sizeof(double));
 
+			const auto cw0 = std::chrono::steady_clock::now();
 			// Gather and transfer only the unique coupled-cell depths (693 or
 			// fewer for the San Francisco case), rather than the 158M-cell H grid.
 			lis::cuda::gather_coupling_depths(
@@ -527,7 +560,7 @@ void lis::cuda::acc::Simulation::run
 		{
 			swmm_couple_accumulate(&couple_clock, verlink, (double)cuda::dt);
 		}
-		
+
 		if (temp_numPS_acc > 0)
 		{
 			for (size_t flowindex = 0; flowindex < verlink->count_dem_index; flowindex++)
@@ -536,9 +569,11 @@ void lis::cuda::acc::Simulation::run
 			}
 			for (int flowindex = 0; flowindex < outfall_source_count; ++flowindex)
 				temp_psvalue[outfall_source_start + flowindex] = C(0.0);
-			// copy only the coupling part. The user point values on the
-			// device are constant (HFIX/QFIX) or rewritten by update_time_series
-			// before use (HVAR/QVAR), so re-sending them every step (the previous implementation) is not needed.
+			// Apply queued returns from the preceding interval.
+			if (return_spread.count > 0)
+				audit.exchange(swmm_return_apply(&return_spread, temp_psvalue + temp_numPS_acc,
+						(double)geometry.dy, (double)cuda::dt));
+			// Copy coupling sources only; user boundaries are maintained on device.
 			cuda::copy(temp_BC.PS_value + temp_numPS_acc, temp_psvalue + temp_numPS_acc,
 					coupling_count * sizeof(NUMERIC_TYPE));
 		}
@@ -550,25 +585,30 @@ void lis::cuda::acc::Simulation::run
 			}
 			for (int flowindex = 0; flowindex < outfall_source_count; ++flowindex)
 				temp_psvalue[surface_coupling_count + flowindex] = C(0.0);
+			// Apply queued returns from the preceding interval.
+			if (return_spread.count > 0)
+				audit.exchange(swmm_return_apply(&return_spread, temp_psvalue,
+						(double)geometry.dy, (double)cuda::dt));
 			cuda::copy(temp_BC.PS_value, temp_psvalue,
 					coupling_count * sizeof(NUMERIC_TYPE));
 		}
+		couple_wall += std::chrono::duration<double>(std::chrono::steady_clock::now() - cw0).count();
 		}
 
-		
+
 		// The timestep remains frozen after net rain and inlet exchange.
 
 		solve->FloodplainQ();
 
-		cuda::Boundary::update_time_series(solver.t); 
+		cuda::Boundary::update_time_series(solver.t);
 
-        solve->update_ghost_cells(); 
+        solve->update_ghost_cells();
 
 		if (pars.drain_nodata)
 		{
 
 			cuda::Boundary::drain_nodata_waterACC(d_U.H, d_DEM,
-					stats_collector.instantaneous_mass(), grid_size); 
+					stats_collector.instantaneous_mass(), grid_size);
 		}
 
 		// Keep drain_nodata and point-source/coupling fluxes in the same
@@ -584,7 +624,7 @@ void lis::cuda::acc::Simulation::run
 			cuda::sync();
 			const double swmm_end = TotalDuration / 1000.0;
 			const int exchange_now = swmm_couple_due(&couple_clock,
-					solver.t + (double)cuda::dt, solver.Sim_Time, swmm_end);
+					t_exact + (double)cuda::dt, solver.Sim_Time, swmm_end);
 			if (exchange_now)
 			{
 				if (couple_clock.every_step) linkDt = cuda::dt;
@@ -604,7 +644,9 @@ void lis::cuda::acc::Simulation::run
 					lis::cuda::Topography::update_outfall_stages(
 						verlink, DEM, tailwater_depths, geometry.dx * geometry.dy);
 				}
+				const auto sw0 = std::chrono::steady_clock::now();
 				swmm_error = swmm_advanceCoupled((double)linkDt, &elapsedTime);
+				swmm_wall += std::chrono::duration<double>(std::chrono::steady_clock::now() - sw0).count();
 				cuda::sync();
 				if (swmm_error == 0 && coupling_count > 0)
 				{
@@ -614,14 +656,21 @@ void lis::cuda::acc::Simulation::run
 							(double)linkDt);
 					lis::cuda::Topography::collect_surface_flood_values(
 						verlink, temp_psvalue, temp_numPS_acc, geometry.dy, (double)linkDt);
+                    double network_return=0.0, network_inlet=0.0;
+                    for(int k=0;k<coupling_count;++k)
+                        network_return+=(double)temp_psvalue[temp_numPS_acc+k]*(double)geometry.dy*(double)linkDt;
+                    for(int n=0;n<Nobjects[NODE];++n) network_inlet+=Node_Inflow[n]*(double)linkDt;
+                    audit.network_exchange(network_return-network_inlet);
 					if (!couple_clock.every_step && cuda::dt > C(0.0))
 					{
-						const NUMERIC_TYPE outfall_scale = (NUMERIC_TYPE)(
-								couple_clock.elapsed / (double)cuda::dt);
-						for (int flowindex = 0; flowindex < coupling_count; ++flowindex)
-						{
-							temp_psvalue[temp_numPS_acc + flowindex] *= outfall_scale;
-						}
+						// Queue positive returns and apply reverse flow now; flush at the end.
+						const double t_after = t_exact + (double)cuda::dt;
+						double next_interval = couple_clock.interval;
+						if ((double)solver.Sim_Time - t_after < next_interval) next_interval = (double)solver.Sim_Time - t_after;
+						if (swmm_end - t_after < next_interval) next_interval = swmm_end - t_after;
+						if(next_interval<1.e-6) next_interval=0.0;
+						swmm_return_schedule(&return_spread, temp_psvalue + temp_numPS_acc,
+								couple_clock.elapsed, next_interval, (double)geometry.dy, (double)cuda::dt);
 					}
 					for(int k=0;k<coupling_count;++k)
 						audit.exchange(temp_psvalue[temp_numPS_acc+k]*geometry.dy*(double)cuda::dt);
@@ -639,36 +688,21 @@ void lis::cuda::acc::Simulation::run
 		}
 
 		stats_collector.accumulate_mass();
-	
-		d_U = solve->update_flow_variables( 
+
+		d_U = solve->update_flow_variables(
 				stats_collector.instantaneous_mass());
-		
+
 		cuda::sync();
-	
+
 		solver.MinTstep = FMIN(solver.MinTstep, cuda::dt);
 
 		if (verbose) printf("t=%f\tdt=%f\n", solver.t, cuda::dt);
-		solver.t += cuda::dt; 
+		t_exact += (double)cuda::dt;
+		solver.t = (NUMERIC_TYPE)t_exact;
 		solver.itCount++;
 		if (swmm_error != 0) break;
 
-		if ((countnum == 0) && (pars.hsfdt > DBL_EPSILON) && ((pars.hsfdt - solver.Sim_Time) <= -DBL_EPSILON) && (((solver.t - pars.hsfdt) >= DBL_EPSILON) || ((pars.hsfdt - solver.t) >= DBL_EPSILON)))
-		{
-			if (swmm_coupled && strlen(filenames.hsfswmmtemp) != 0)
-			{
-				FILE* hsfTemp;
-				if ((hsfTemp = fopen(filenames.hsfswmmtemp, "w+b")) != NULL)
-				{
-					saveTempHsf(hsfTemp);
-				}
-			}
 
-			if (strlen(filenames.hsffloodtemp) != 0)
-			{
-				write_hsfflood(filenames.hsffloodtemp, pars, U.H, U.Qx, U.Qy, verbose);
-			}
-			countnum++;
-		}
 
 
 		if (stats.need_to_write(solver.t) || states.mint_hk == OFF)
@@ -684,7 +718,7 @@ void lis::cuda::acc::Simulation::run
 		{
 //			solve->updateMaxFieldACC(solver.t);
 
-			sampler.sample_ACC(d_U.H, d_U.Vx, d_U.Vy, solver.t); 
+			sampler.sample_ACC(d_U.H, d_U.Vx, d_U.Vy, solver.t);
 
 //			lis::StatsEntry Stats_Entry;
 
@@ -694,7 +728,7 @@ void lis::cuda::acc::Simulation::run
 			double pending=0;
 			if(swmm_coupled && !couple_clock.every_step)
 				for(int k=0;k<verlink->count_index;++k) pending+=couple_clock.volume[k];
-			audit.sample(Stats_Entry,stats_collector,pending);
+			audit.sample(Stats_Entry,stats_collector,pending,swmm_return_pending(&return_spread),swmm_wall,couple_wall);
 
 			pars.MassTotal = stats.next_save;
 
@@ -715,7 +749,7 @@ void lis::cuda::acc::Simulation::run
 //					NUMERIC_TYPE SaveTotal, MassTotal;
 //					int SaveNo;
 
-					
+
 					write_checkpoint(filenames, states, pars, solver,
 						U.H, U.Qx, U.Qy, U.maxH, U.totalHtm, U.maxHtm, U.initHtm, Stats_Entry, cuda::dt, verbose);
 
@@ -737,15 +771,27 @@ void lis::cuda::acc::Simulation::run
 			}
 		}
 		//printf("done222\n");
+        if(!countnum && pars.hsfdt>0 && t_exact+1.e-7>=(double)pars.hsfdt) {
+            if(filenames.hsffloodtemp[0]) save_restart(filenames.hsffloodtemp);
+            if(swmm_coupled && filenames.hsfswmmtemp[0]) {
+                FILE* legacy=fopen(filenames.hsfswmmtemp,"wb");
+                if(!legacy) throw std::runtime_error("Cannot write SWMM warm start");
+                saveTempHsf(legacy);
+            }
+            countnum=1;
+        }
+
 	}
 	//---------------------------------------------------------------------------
 	//fclose(dUfiletest2);
 	//---------------------------------------------------------------------------
+	if(filenames.hsffloodend[0]) save_restart(filenames.hsffloodend);
 	double final_pending=0;
 	if(swmm_coupled && !couple_clock.every_step)
 		for(int k=0;k<verlink->count_index;++k) final_pending+=couple_clock.volume[k];
-	audit.sample(stats_collector.create_entry(solver,d_U.H),stats_collector,final_pending);
+	audit.sample(stats_collector.create_entry(solver,d_U.H),stats_collector,final_pending,swmm_return_pending(&return_spread),swmm_wall,couple_wall);
 	swmm_couple_clock_free(&couple_clock);
+	swmm_return_free(&return_spread);
 	if (swmm_coupled)
 	{
 		swmm_end();
@@ -758,17 +804,13 @@ void lis::cuda::acc::Simulation::run
 
 	time_t loop_end;
 	time(&loop_end);
-	NUMERIC_TYPE seconds = difftime(loop_end, loop_start);
-	printf("loop time %lf\n", seconds);  
+	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-precise_loop_start).count();
+	printf("loop time %lf\n", seconds);
+	if (swmm_coupled) audit.timing((double)seconds, swmm_wall, couple_wall, (long)solver.itCount);
 
 	//output max files
 	snapshot.write_max_files(d_U);
-	if (strlen(filenames.hsffloodend) != 0)
-	{
-		Flow::copy(U,d_U,geometry); // Hotstart requires full state, not snapshot fields.
-		write_hsfflood(filenames.hsffloodend, pars, U.H, U.Qx, U.Qy, verbose);
-		if (verbose == ON) printf("hsffloodend write done!\n");
-	}
+
 
 	if (swmm_coupled) lis::cuda::Topography::free_vconnect(verlink);
 
@@ -785,8 +827,7 @@ void lis::cuda::acc::Simulation::run
 	cuda::free_device(d_DEM);
 	cuda::free_device(d_manning);
 	Flow::free_pinned(U);
-	// free the boundary buffers that were actually allocated (the previous implementation passed the
-	// host shadow of the __constant__ symbol, which freed nothing).
+	// Release the allocated boundary buffers.
 	cuda::free_device(d_ts_time);
 	cuda::free_device(d_ts_value);
 	cuda::free_device(temp_BC.all_time_series);

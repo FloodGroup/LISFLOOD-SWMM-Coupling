@@ -7,12 +7,14 @@
 #include <algorithm>
 #include <stdio.h>
 #include <float.h>
+#include <chrono>
 #include "../geometry.h"
 #include "../cpu_coupling.h"
 extern "C" {
 #include "../headers.h"
 };
 #include "../swmm_couple.h"
+#include "../coupling_restart.h"
 #include "../swmm5.h"
 
 namespace floodfv1 {
@@ -504,7 +506,7 @@ void fv1::solve
 		{
 			fprintf(stderr, "ERROR: unable to initialise SWMM coupling.\n");
 			swmm_close();
-			return;
+			throw std::runtime_error("Unable to initialise SWMM coupling; see the SWMM report");
 		}
 
 		floodfv1::verticalcon::load_floodinfo(Fnameptr, verlink, Parptr,
@@ -584,29 +586,40 @@ void fv1::solve
 		swmm_coupled ? verlink->count_index : 0);
 	//--------------------------------------------------------------------
 
+
+    SwmmReturnSpread return_spread;
+    swmm_return_init(&return_spread,swmm_coupled && !couple_clock.every_step?coupled_source_end-surface_source_start:0);
+    double t_exact=(double)Solverptr->t, swmm_wall=0.0;
+    int countnum=0;
+    if(swmm_coupled && (Fnameptr->hsffloodtemp[0] || Fnameptr->hsffloodend[0] || coupling_restart_file(Fnameptr->hsffloodread)) &&
+        !swmm_hydraulicRestartSupported())
+        throw std::runtime_error("Hydraulic restart is unavailable with SWMM runoff, RDII, storage exfiltration, routing-interface input, events or active quality routing");
+    const auto restart_fields=cpu_restart_fields(*Parptr,*Arrptr,true);
+    if(coupling_restart_file(Fnameptr->hsffloodread)) {
+        coupling_restart_io(Fnameptr->hsffloodread,true,2,*Parptr,*Solverptr,verlink,
+            swmm_coupled,couple_clock,return_spread,t_exact,restart_fields);
+        Solverptr->vol1=DomainVol(Statesptr,Parptr,nullptr,Arrptr,nullptr);
+    }
+    auto save_restart=[&](const char* path) {
+        coupling_restart_io(path,false,2,*Parptr,*Solverptr,verlink,
+            swmm_coupled,couple_clock,return_spread,t_exact,restart_fields);
+    };
+    if(swmm_coupled) printf("SWMM threads %d; FV1 fixed-interval returns spread over the next interval\n",swmm_getNumThreads());
+
 	time_t loop_start;
 	time(&loop_start);
+    const auto precise_loop_start=std::chrono::steady_clock::now();
 
-	while (Solverptr->t < Solverptr->Sim_Time
+	while (t_exact < (double)Solverptr->Sim_Time-1.e-9
 			&& (!swmm_coupled
 					|| (NewRoutingTime < TotalDuration && !ErrorCode)))
 	{	
-		// Freeze one common coupling step for exchange limiting, FV1 and SWMM.
-		const NUMERIC_TYPE remaining_2d = Solverptr->Sim_Time - Solverptr->t;
-		Solverptr->Tstep = getmin(Solverptr->Tstep, remaining_2d);
-		Solverptr->Tstep = rain.clip_step(Solverptr->t, Solverptr->Tstep);
-		if (swmm_coupled && couple_clock.every_step)
-		{
-			const NUMERIC_TYPE remaining_swmm = static_cast<NUMERIC_TYPE>(
-					(TotalDuration - NewRoutingTime) / 1000.0);
-			Solverptr->Tstep = getmin(Solverptr->Tstep, remaining_swmm);
-		}
-		else if (swmm_coupled)
-		{
-			Solverptr->Tstep = (NUMERIC_TYPE)swmm_couple_clip_dt(&couple_clock,
-				Solverptr->t, Solverptr->Tstep, Solverptr->Sim_Time,
-				TotalDuration / 1000.0);
-		}
+
+        if(Statesptr->adaptive_ts==ON) Solverptr->Tstep=Tstep_from_cfl(Parptr,Solverptr,Arrptr);
+        else Solverptr->Tstep=Solverptr->InitTstep;
+        Solverptr->Tstep=(NUMERIC_TYPE)coupling_step(couple_clock,swmm_coupled,t_exact,
+            (double)Solverptr->Tstep,(double)Solverptr->Sim_Time,NewRoutingTime/1000.0,
+            TotalDuration/1000.0,rain.time_to_next_frame(t_exact),countnum?0.0:(double)Parptr->hsfdt);
 		if (Solverptr->Tstep <= C(0.0)) break;
 
 		zero_flux_stats(BCptr);
@@ -637,15 +650,17 @@ void fv1::solve
 			BCptr->PS_Val[outfall_source_start + source] = C(0.0);
 		}
 
-		update_point_sources(Parptr, Solverptr, BCptr, Arrptr, 0,
-			swmm_coupled ? outfall_source_start : BCptr->numPS,
+
+        if(return_spread.count>0) swmm_return_apply(&return_spread,BCptr->PS_Val+surface_source_start,(double)Parptr->dy,(double)Solverptr->Tstep);
+        update_point_sources(Parptr, Solverptr, BCptr, Arrptr, 0,
+            swmm_coupled ? (return_spread.count>0?coupled_source_end:outfall_source_start) : BCptr->numPS,
 			surface_source_start);
 
 		int swmm_error = 0;
 		if (swmm_coupled)
 		{
 			const int exchange_now = swmm_couple_due(&couple_clock,
-				Solverptr->t + Solverptr->Tstep, Solverptr->Sim_Time,
+				t_exact + (double)Solverptr->Tstep, Solverptr->Sim_Time,
 				TotalDuration / 1000.0);
 			if (exchange_now)
 			{
@@ -657,13 +672,23 @@ void fv1::solve
 				}
 				swmm_beginCoupledExchange();
 				lis::cpu_coupling::update_outfall_stages(verlink, Parptr, Arrptr);
-				swmm_error = swmm_advanceCoupled((double)linkDt, &elapsedTime);
+
+                const auto sw0=std::chrono::steady_clock::now();
+                swmm_error = swmm_advanceCoupled((double)linkDt, &elapsedTime);
+                swmm_wall+=std::chrono::duration<double>(std::chrono::steady_clock::now()-sw0).count();
 				if (!swmm_error)
 				{
-					lis::cpu_coupling::collect_return_sources(verlink, BCptr,
-						Parptr, Arrptr, surface_source_start,
-						outfall_source_start, (double)linkDt,
-						(double)Solverptr->Tstep);
+
+                    lis::cpu_coupling::collect_return_sources(verlink, BCptr,
+                        Parptr,Arrptr,surface_source_start,outfall_source_start,
+                        (double)linkDt,return_spread.count>0?(double)linkDt:(double)Solverptr->Tstep);
+                    if(return_spread.count>0) {
+                        double next=(std::min)(couple_clock.interval,
+                            (std::min)((double)Solverptr->Sim_Time,TotalDuration/1000.0)-t_exact-(double)Solverptr->Tstep);
+                        if(next<1.e-6) next=0.0;
+                        swmm_return_schedule(&return_spread,BCptr->PS_Val+surface_source_start,
+                            (double)linkDt,next,(double)Parptr->dy,(double)Solverptr->Tstep);
+                    }
 					update_point_sources(Parptr, Solverptr, BCptr, Arrptr,
 						surface_source_start, coupled_source_end,
 						surface_source_start);
@@ -683,7 +708,8 @@ void fv1::solve
 		accumulate_boundary_flux_stats(Parptr, Solverptr, BCptr, Arrptr);
 
 		Solverptr->MinTstep = getmin(Solverptr->MinTstep, Solverptr->Tstep);
-		Solverptr->t += Solverptr->Tstep;
+		t_exact+=(double)Solverptr->Tstep;
+        Solverptr->t=(NUMERIC_TYPE)t_exact;
 		Solverptr->itCount += 1;
 		if (swmm_error != 0) break;
 
@@ -719,13 +745,26 @@ void fv1::solve
 			}
 			write_solution(Fnameptr, Statesptr, Parptr, Solverptr, Arrptr);
 		}
+        if(!countnum && Parptr->hsfdt>0 && t_exact+1.e-7>=(double)Parptr->hsfdt) {
+            if(Fnameptr->hsffloodtemp[0]) save_restart(Fnameptr->hsffloodtemp);
+            if(swmm_coupled && Fnameptr->hsfswmmtemp[0]) {
+                FILE* legacy=fopen(Fnameptr->hsfswmmtemp,"wb");
+                if(!legacy) throw std::runtime_error("Cannot write SWMM warm start");
+                saveTempHsf(legacy);
+            }
+            countnum=1;
+        }
+
 	}
 
-	time_t loop_end;
+
+    if(Fnameptr->hsffloodend[0]) { save_restart(Fnameptr->hsffloodend); Fnameptr->hsffloodend[0]='\0'; }
+    time_t loop_end;
 	time(&loop_end);
 
-	double seconds = difftime(loop_end, loop_start);
+	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-precise_loop_start).count();
 	printf("loop time %lf\n", seconds);
+    printf("TIMING loop %.3f s, SWMM %.3f s, pending_to_2d_m3 %.12g\n",seconds,swmm_wall,swmm_return_pending(&return_spread));
 
 	if (swmm_coupled)
 	{
@@ -737,7 +776,8 @@ void fv1::solve
 		free(Node_Inflow);
 		Node_Inflow = nullptr;
 	}
-	swmm_couple_clock_free(&couple_clock);
+	swmm_return_free(&return_spread);
+    swmm_couple_clock_free(&couple_clock);
 
     write_max_field(Fnameptr, Statesptr, Parptr, Arrptr);
 

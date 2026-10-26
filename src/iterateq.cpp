@@ -13,10 +13,12 @@ ITERATEQ and UPDATEH
 #include "geometry.h"
 #include "cpu_coupling.h"
 #include <float.h>
+#include <chrono>
 extern "C" {
 #include "headers.h"
 };
 #include "swmm_couple.h"
+#include "coupling_restart.h"
 #include "swmm5.h"
 
 
@@ -54,7 +56,7 @@ void flood::verticalcon::load_floodinfo
 	vcon_init(verlink, Parptr);
 	fscanf(flood_file, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s");
 	read_vconinfo(verlink, flood_file, verbose);
-	fclose(flood_file);                    
+	fclose(flood_file);
 	cal_dem_index(verlink, flood_error, Parptr, Arrptr);
 	check_nodedepth(verlink, flood_error, Arrptr);
 	demcountuni_cal(verlink);
@@ -503,7 +505,7 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 		{
 			fprintf(stderr, "ERROR: unable to initialise SWMM coupling.\n");
 			swmm_close();
-			return;
+			throw std::runtime_error("Unable to initialise SWMM coupling; see the SWMM report");
 		}
 
 		char passtime[256] = { 0 };
@@ -575,7 +577,7 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 	}
 	if (Statesptr->SGC == ON)
 	{
-		// because the SGC model calculates the time step in UpdateH rather than during calcFPflow it needs to initalise 
+		// because the SGC model calculates the time step in UpdateH rather than during calcFPflow it needs to initalise
 		// SGCtmpTstep, which would usually be calculated in UpdateH
 		Solverptr->Tstep = Solverptr->InitTstep;
 		CalcT(Parptr, Solverptr, Arrptr);
@@ -647,16 +649,44 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 		!swmm_coupled || Parptr->swmm_couple_every_step,
 		(double)Parptr->swmm_coupleint,
 		swmm_coupled ? verlink->count_index : 0);
+	// Queue positive returns for the next fixed exchange interval.
+	SwmmReturnSpread return_spread;
+	swmm_return_init(&return_spread, swmm_coupled && !couple_clock.every_step
+		? coupled_source_end - surface_source_start : 0);
+	double t_exact = (double)Solverptr->t;
+	double swmm_wall = 0.0;
+	if (swmm_coupled)
+		printf("SWMM exchange %s, SWMM threads %d\n",
+			couple_clock.every_step ? "every 2D step" : "fixed interval (equal sub-steps, returns spread over the next interval)",
+			swmm_getNumThreads());
 	//--------------------------------------------------------------------
+
+
+    int countnum=0;
+    if(swmm_coupled && (Fnameptr->hsffloodtemp[0] || Fnameptr->hsffloodend[0] || coupling_restart_file(Fnameptr->hsffloodread)) &&
+        !swmm_hydraulicRestartSupported())
+        throw std::runtime_error("Hydraulic restart is unavailable with SWMM runoff, RDII, storage exfiltration, routing-interface input, events or active quality routing");
+    const auto restart_fields=cpu_restart_fields(*Parptr,*Arrptr,false);
+    if(coupling_restart_file(Fnameptr->hsffloodread)) {
+        coupling_restart_io(Fnameptr->hsffloodread,true,1,*Parptr,*Solverptr,verlink,
+            swmm_coupled,couple_clock,return_spread,t_exact,restart_fields);
+        Solverptr->vol1=DomainVol(Statesptr,Parptr,nullptr,Arrptr,nullptr);
+    }
+    auto save_restart=[&](const char* path) {
+        coupling_restart_io(path,false,1,*Parptr,*Solverptr,verlink,
+            swmm_coupled,couple_clock,return_spread,t_exact,restart_fields);
+    };
+    if(swmm_coupled) printf("SWMM threads %d; pending returns included in hydraulic restart\n",swmm_getNumThreads());
 
 	time_t loop_start;
 	time(&loop_start);
-	int countnum = 0;
+    const auto precise_loop_start=std::chrono::steady_clock::now();
+
 	// main iteration loop
-	while (Solverptr->t < Solverptr->Sim_Time
+	while (t_exact < (double)Solverptr->Sim_Time-1.e-9
 			&& (!swmm_coupled
 					|| (NewRoutingTime < TotalDuration && !ErrorCode)))
-	{	
+	{
 
 
 		if (timefile != nullptr)
@@ -684,7 +714,7 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 		if (Statesptr->SGC == ON)
 		{
 			printf("SGC not processed here\n");
-			//// SGC uses time step calculated in update H and stored in Solverptr->SGCtmpTstep 
+			//// SGC uses time step calculated in update H and stored in Solverptr->SGCtmpTstep
 			//Solverptr->Tstep = Solverptr->SGCtmpTstep;
 			//// sub grid floodplain models
 			//SGC_FloodplainQ(Statesptr, Parptr, Solverptr, Arrptr, SGCptr);
@@ -709,7 +739,41 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 			// Time step is reset to initial time step at the start of each FloodplainQ calculation
 			if (Solverptr->t>C(0.0)) Solverptr->Tstep = Solverptr->InitTstep;
 
+			// Select the aligned step before computing fluxes so both updates use it.
+			if (Statesptr->acceleration == ON)
+			{
+				CalcT(Parptr, Solverptr, Arrptr);
+				double remain = (double)Solverptr->Sim_Time - t_exact;
+				if (swmm_coupled)
+				{
+					if (couple_clock.every_step)
+					{
+						const double r = (TotalDuration - NewRoutingTime) / 1000.0;
+						if (r < remain) remain = r;
+					}
+					else
+					{
+						const double r1 = couple_clock.interval - couple_clock.elapsed;
+						const double r2 = TotalDuration / 1000.0 - t_exact;
+						if (r1 < remain) remain = r1;
+						if (r2 < remain) remain = r2;
+					}
+				}
+				// Treat nearby rounded rain-frame and exchange times as one target.
+				const double rain_remain = dynamic_rain.time_to_next_frame(t_exact);
+				if (rain_remain < remain - RAIN_FRAME_TIME_TOL) remain = rain_remain;
+
+                if(!countnum && Parptr->hsfdt>t_exact+1.e-7) remain=(std::min)(remain,(double)Parptr->hsfdt-t_exact);
+                Solverptr->Tstep = (NUMERIC_TYPE)coupling_equal_substep((double)Solverptr->Tstep, remain);
+			}
+			const NUMERIC_TYPE chosen_step = Solverptr->Tstep;
+
 			FloodplainQ(Statesptr, Parptr, Solverptr, Arrptr, SGCptr);
+			// CalcT in FloodplainQ only lowers the step, except on a completely dry
+			// domain where it resets it to initial_tstep (no fluxes then): keep the target
+			if (Statesptr->acceleration == ON && Solverptr->Tstep > chosen_step) Solverptr->Tstep = chosen_step;
+			if (Statesptr->acceleration != ON)
+			{
 			Solverptr->Tstep = dynamic_rain.clip_step(Solverptr->t,
 				getmin(Solverptr->Tstep, Solverptr->Sim_Time - Solverptr->t));
 			if (swmm_coupled && couple_clock.every_step)
@@ -722,6 +786,7 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 				Solverptr->Tstep = (NUMERIC_TYPE)swmm_couple_clip_dt(&couple_clock,
 					Solverptr->t, Solverptr->Tstep, Solverptr->Sim_Time,
 					TotalDuration / 1000.0);
+			}
 			}
 			if (Solverptr->Tstep <= C(0.0)) break;
 
@@ -765,11 +830,16 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 						verlink->flow_2D_dem[verlink->dem_Vindex_uni[source]];
 				for (int source = 0; source < verlink->outfall_dem_count; ++source)
 					BCptr->PS_Val[outfall_source_start + source] = C(0.0);
+				// Apply queued returns from the preceding interval.
+				if (return_spread.count > 0)
+					swmm_return_apply(&return_spread, BCptr->PS_Val + surface_source_start,
+						(double)Parptr->dy, (double)Solverptr->Tstep);
 				lis::cpu_coupling::apply_coupled_sources(BCptr, Parptr,
-					Solverptr, Arrptr, surface_source_start, outfall_source_start);
+					Solverptr, Arrptr, surface_source_start,
+					return_spread.count > 0 ? coupled_source_end : outfall_source_start);
 
 				const int exchange_now = swmm_couple_due(&couple_clock,
-					Solverptr->t + Solverptr->Tstep, Solverptr->Sim_Time,
+					t_exact + (double)Solverptr->Tstep, Solverptr->Sim_Time,
 					TotalDuration / 1000.0);
 				if (exchange_now)
 				{
@@ -782,13 +852,30 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 					swmm_beginCoupledExchange();
 					lis::cpu_coupling::update_outfall_stages(verlink, Parptr,
 						Arrptr);
+					const auto sw0 = std::chrono::steady_clock::now();
 					ErrorCode = swmm_advanceCoupled((double)linkDt, &elapsedTime);
+					swmm_wall += std::chrono::duration<double>(std::chrono::steady_clock::now() - sw0).count();
 					if (!ErrorCode)
 					{
-						lis::cpu_coupling::collect_return_sources(verlink, BCptr,
-							Parptr, Arrptr, surface_source_start,
-							outfall_source_start, (double)linkDt,
-							(double)Solverptr->Tstep);
+						if (return_spread.count > 0)
+						{
+							// Queue positive returns; apply reverse outfall flow immediately.
+							lis::cpu_coupling::collect_return_sources(verlink, BCptr,
+								Parptr, Arrptr, surface_source_start,
+								outfall_source_start, (double)linkDt, (double)linkDt);
+							const double t_after = t_exact + (double)Solverptr->Tstep;
+							double next_interval = couple_clock.interval;
+							if ((double)Solverptr->Sim_Time - t_after < next_interval) next_interval = (double)Solverptr->Sim_Time - t_after;
+							if (TotalDuration / 1000.0 - t_after < next_interval) next_interval = TotalDuration / 1000.0 - t_after;
+							if(next_interval<1.e-6) next_interval=0.0;
+							swmm_return_schedule(&return_spread, BCptr->PS_Val + surface_source_start,
+								(double)linkDt, next_interval, (double)Parptr->dy, (double)Solverptr->Tstep);
+						}
+						else
+							lis::cpu_coupling::collect_return_sources(verlink, BCptr,
+								Parptr, Arrptr, surface_source_start,
+								outfall_source_start, (double)linkDt,
+								(double)Solverptr->Tstep);
 						lis::cpu_coupling::apply_coupled_sources(BCptr, Parptr,
 							Solverptr, Arrptr, surface_source_start,
 							coupled_source_end);
@@ -814,29 +901,11 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 
 		// Update t with final Tstep calculated
 		if (Solverptr->t>C(0.0)) Solverptr->MinTstep = getmin(Solverptr->MinTstep, Solverptr->Tstep);
-		Solverptr->t += Solverptr->Tstep;
+		t_exact += (double)Solverptr->Tstep;
+		Solverptr->t = (NUMERIC_TYPE)t_exact;
 		Solverptr->itCount += 1;
 
-		if ((countnum == 0) && (Parptr->hsfdt > DBL_EPSILON) && ((Parptr->hsfdt - Solverptr->Sim_Time) <= -DBL_EPSILON) && (((Solverptr->t - Parptr->hsfdt) >= DBL_EPSILON)|| ((Parptr->hsfdt - Solverptr->t) >= DBL_EPSILON)))
-		{
-			if (verbose == ON) printf("\nhsf start write!!!!!!!!!! \n");
-			if (swmm_coupled && strlen(Fnameptr->hsfswmmtemp) != 0)
-			{
-				FILE* hsfTemp;
-				if ((hsfTemp = fopen(Fnameptr->hsfswmmtemp, "w+b")) != NULL)
-				{
-					if (verbose == ON) printf("\nswmmtemphsf start write!!!!!!!!!! \n");
-					saveTempHsf(hsfTemp);
-				}
-			}
 
-			if (strlen(Fnameptr->hsffloodtemp) != 0)
-			{
-				if (verbose == ON) printf("\nfloodtemphsf start write!!!!!!!!!! \n");
-				WriteHsfFlood(Fnameptr->hsffloodtemp, Statesptr, Parptr, ChannelSegments, Arrptr, verbose);
-			}
-			countnum = 1;
-		}
 
 		// Update time of initial flood inundation (in hours) and total inundation time (in seconds)
 		if ((Statesptr->reset_timeinit == ON) & (Solverptr->t>Parptr->reset_timeinit_time))
@@ -862,7 +931,7 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 				{
 					if (Arrptr->initHtm[ptr] == NULLVAL /*&& (Arrptr->H[ptr]>C(0.01)*/)
 						Arrptr->initHtm[ptr] = Solverptr->t / C(3600.0);
-					//if (Arrptr->H[ptr]>C(0.01)) 
+					//if (Arrptr->H[ptr]>C(0.01))
 					Arrptr->totalHtm[ptr] += Solverptr->Tstep / C(3600.0);
 					// Update maximum water depths, and time of maximum (in hours) TDF updated only track maxH when h > DepthThresh
 					if (Arrptr->H[ptr] > Arrptr->maxH[ptr])
@@ -1100,16 +1169,36 @@ void IterateQ(Fnames *Fnameptr, Files *Fptr, States *Statesptr, Pars *Parptr, So
 			}
 			Parptr->steadyTotal += Parptr->steadyInt;
 		}
+        if(!countnum && Parptr->hsfdt>0 && t_exact+1.e-7>=(double)Parptr->hsfdt) {
+            if(Fnameptr->hsffloodtemp[0]) save_restart(Fnameptr->hsffloodtemp);
+            if(swmm_coupled && Fnameptr->hsfswmmtemp[0]) {
+                FILE* legacy=fopen(Fnameptr->hsfswmmtemp,"wb");
+                if(!legacy) throw std::runtime_error("Cannot write SWMM warm start");
+                saveTempHsf(legacy);
+            }
+            countnum=1;
+        }
+
 	}
 	//END main ITERATIONS
 
 	if (timefile != nullptr) fclose(timefile);
 
-	time_t loop_end;
+
+    if(Fnameptr->hsffloodend[0]) {
+        save_restart(Fnameptr->hsffloodend);
+        Fnameptr->hsffloodend[0]='\0'; // Prevent the main driver overwriting the bundled restart.
+    }
+    time_t loop_end;
 	time(&loop_end);
 
-	double seconds = difftime(loop_end, loop_start);
+	double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-precise_loop_start).count();
 	printf("loop time %lf\n", seconds);
+	if (swmm_coupled)
+		printf("TIMING loop %.3f s, SWMM %.3f s (%.0f%%), 2D steps %ld, SWMM returns not yet applied %.6g m3\n",
+			(double)seconds, swmm_wall, 100.0 * swmm_wall / ((double)seconds > 0 ? (double)seconds : 1.0),
+			(long)Solverptr->itCount, swmm_return_pending(&return_spread));
+	swmm_return_free(&return_spread);
 
 	if (swmm_coupled)
 	{

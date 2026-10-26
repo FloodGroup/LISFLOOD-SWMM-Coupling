@@ -118,12 +118,8 @@ __global__ void update_dt_per_element
 				NUMERIC_TYPE dt_ = cuda::solver_params.cfl * cuda::geometry.dx
 					/ SQRT(cuda::physical_params.g * H);
 
-				if (FABS(dt[j * cuda::pitch + i] - C(0.0)) < C(1e-6)) {
-					dt[j * cuda::pitch + i] = cuda::solver_params.max_dt;
-				}
-				else {
-					dt[j * cuda::pitch + i] = getmin(dt_, dt[j * cuda::pitch + i]);
-				}
+				// Recompute the current-depth CFL limit, capped by initial_tstep.
+				dt[j * cuda::pitch + i] = getmin(dt_, cuda::solver_params.max_dt);
 
 
 			}

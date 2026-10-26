@@ -114,6 +114,20 @@ public:
         return step;
     }
 
+    // Seconds to the next rain frame, allowing for rounded timestamps.
+    double time_to_next_frame(double t) const
+    {
+#if _NETCDF == 1
+        if (enabled_) {
+            for (size_t i=0;i<netcdf_.tlen;++i) {
+                const double boundary=(double)(NUMERIC_TYPE)(netcdf_.times[i]*C(3600.0));
+                if (boundary>t+RAIN_FRAME_TIME_TOL) return boundary-t;
+            }
+        }
+#endif
+        return HUGE_VAL;
+    }
+
     void validate_end(NUMERIC_TYPE end) const
     {
 #if _NETCDF == 1

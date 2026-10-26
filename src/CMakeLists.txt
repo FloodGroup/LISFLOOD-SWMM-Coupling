@@ -228,7 +228,7 @@ if (CMAKE_CUDA_COMPILER)
 		cuda/acc_nugrid/write_chkpnt.cu
 		cuda/acc_nugrid/read_chkpnt.cu
 	)
-	# CUB is taken from the CUDA toolkit (CUDA >= 11 ships it).
+	# Use the CUB headers bundled with the active CUDA toolkit.
 	target_include_directories(lisflood BEFORE PUBLIC
 			${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 	target_include_directories(lisflood PUBLIC cuda cuda/common)
@@ -250,6 +250,12 @@ target_link_libraries(DG2downscale PRIVATE lisflood-base)
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
 	target_link_libraries(lisflood-base INTERFACE OpenMP::OpenMP_CXX)
+endif()
+# Enable the SWMM input's THREADS option for C routing sources.
+if (OpenMP_C_FOUND)
+	target_link_libraries(lisflood-base INTERFACE OpenMP::OpenMP_C)
+else()
+	message(WARNING "OpenMP for C not found: SWMM will run on one thread")
 endif()
 
 if (UNIX)

@@ -12,7 +12,8 @@ class RunAudit {
     FILE* water_ = nullptr;
     std::string status_;
     bool coupled_, finished_ = false;
-    double initial2_, initial1_ = 0, expected_exchange_ = 0;
+    double initial2_, initial1_ = 0, expected_exchange_ = 0, initial_pending_ = 0;
+    double network_exchange_ = 0;
     std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now();
     void status(const char* state, double t) {
         FILE* f=fopen(status_.c_str(),"w");
@@ -30,24 +31,58 @@ public:
         double s[5]={}; if(coupled_ && swmm_getCoupledAudit(s)==0) initial1_=s[0];
         fprintf(log_,"solver=%s precision=%s target_s=%.12g initial_2d_m3=%.12g initial_1d_m3=%.12g\n",solver,NUMERIC_TYPE_NAME,target,initial2_,initial1_);
         fprintf(log_,"Net-rain positive and negative volumes are NOT gross rainfall and gross infiltration. Other_2d includes external boundaries and uniform rain. Coupling entries are signed from 2D perspective. Pending exchange is included in combined balance.\n");
-        fprintf(water_,"time_2d_s,time_swmm_s,wall_s,dt_s,steps_2d,steps_swmm,nonconverged_swmm,storage_2d_m3,storage_1d_m3,pending_to_1d_m3,netrain_added_m3,netrain_removed_m3,nodata_drained_m3,inlet_to_2d_m3,inlet_to_1d_m3,outfall_to_2d_m3,outfall_to_1d_m3,other_2d_net_m3,swmm_all_sources_net_m3,expected_coupling_to_2d_m3,actual_coupling_to_2d_m3,coupling_application_gap_m3,combined_balance_residual_m3\n");
+        fprintf(water_,"time_2d_s,time_swmm_s,wall_s,dt_s,steps_2d,steps_swmm,nonconverged_swmm,storage_2d_m3,storage_1d_m3,pending_to_1d_m3,netrain_added_m3,netrain_removed_m3,nodata_drained_m3,inlet_to_2d_m3,inlet_to_1d_m3,outfall_to_2d_m3,outfall_to_1d_m3,other_2d_net_m3,swmm_all_sources_net_m3,expected_coupling_to_2d_m3,actual_coupling_to_2d_m3,coupling_application_gap_m3,combined_balance_residual_m3,pending_to_2d_m3,swmm_wall_s,coupling_host_wall_s\n");
         fflush(log_); status("RUNNING",0);
     }
     double wall() const { return std::chrono::duration<double>(std::chrono::steady_clock::now()-started_).count(); }
     void exchange(double volume_to_2d) { expected_exchange_+=volume_to_2d; }
-    void sample(const lis::StatsEntry& e, lis::cuda::StatsCollector& stats, double pending) {
+    void network_exchange(double volume_to_2d) { network_exchange_+=volume_to_2d; }
+    void restart_baseline(double volume, double pending) {
+        initial2_=volume; initial_pending_=pending;
+        double s[5]={}; if(coupled_) swmm_getCoupledAudit(s);
+        initial1_=s[0]; expected_exchange_=0; network_exchange_=0;
+        fprintf(log_,"RESTART_BASELINE initial_2d_m3=%.12g initial_1d_m3=%.12g initial_pending_m3=%.12g\n",initial2_,initial1_,initial_pending_);
+        fflush(log_);
+    }
+    // Log the SWMM thread count and exchange interval (-1 = every step).
+    void settings(int swmm_threads, double coupleint) {
+        if(!coupled_) return;
+        fprintf(log_,"COUPLING swmm_threads=%d coupleint_s=%.9g time_step=current CFL with target alignment; positive_returns=%s reverse_outfall=immediate\n",swmm_threads,coupleint,coupleint>0?"next_interval":"current_step");
+        fflush(log_);
+    }
+    // pending_to_1d: 2D water taken for SWMM, not yet passed to it (fixed interval);
+    // pending_to_2d: SWMM returns not yet applied to the surface.
+    void sample(const lis::StatsEntry& e, lis::cuda::StatsCollector& stats, double pending,
+                double pending_to_2d=0.0, double swmm_wall=0.0, double couple_wall=0.0) {
         double a[9]={},s[5]={}; stats.audit_totals(a);
         if(coupled_) swmm_getCoupledAudit(s);
         double coupling=a[5]-a[6]+a[7]-a[8];
         double net2=a[0]-a[1];
         double other=net2-coupling-(a[2]-a[3])+a[4];
-        double residual=(double)e.volume-initial2_+s[0]-initial1_+pending-net2-s[1];
-        fprintf(water_,"%.12g,%.12g,%.3f,%.9g,%ld,%.0f,%.0f,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g\n",
+        // Native SWMM totals include interface inflows and outflows. Remove
+        // those internal transfers before forming a combined-domain budget.
+        const double pending_change=pending+pending_to_2d-initial_pending_;
+        const double external2=net2-coupling;
+        const double external1=s[1]+network_exchange_;
+        const double interface_residual=coupling+pending_change-network_exchange_;
+        double residual=(double)e.volume-initial2_+s[0]-initial1_+pending_change-external2-external1;
+        fprintf(log_,"INTERFACE network_to_2d_m3=%.12g applied_to_2d_m3=%.12g pending_change_m3=%.12g residual_m3=%.12g\n",network_exchange_,coupling,pending_change,interface_residual);
+        fprintf(water_,"%.12g,%.12g,%.3f,%.9g,%ld,%.0f,%.0f,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%.3f,%.3f\n",
             (double)e.t,s[2],wall(),(double)e.dt,e.iteration,s[3],s[4],(double)e.volume,s[0],pending,
-            a[2],a[3],a[4],a[5],a[6],a[7],a[8],other,s[1],expected_exchange_,coupling,coupling-expected_exchange_,residual);
-        fprintf(log_,"PROGRESS t_s=%.9g wall_s=%.3f dt_s=%.9g swmm_steps=%.0f nonconverged=%.0f combined_residual_m3=%.9g coupling_gap_m3=%.9g\n",
-            (double)e.t,wall(),(double)e.dt,s[3],s[4],residual,coupling-expected_exchange_);
+            a[2],a[3],a[4],a[5],a[6],a[7],a[8],other,s[1],expected_exchange_,coupling,coupling-expected_exchange_,residual,
+            pending_to_2d,swmm_wall,couple_wall);
+        fprintf(log_,"PROGRESS t_s=%.9g wall_s=%.3f dt_s=%.9g swmm_steps=%.0f nonconverged=%.0f combined_residual_m3=%.9g coupling_gap_m3=%.9g swmm_wall_s=%.3f\n",
+            (double)e.t,wall(),(double)e.dt,s[3],s[4],residual,coupling-expected_exchange_,swmm_wall);
         if(fflush(water_)!=0 || fflush(log_)!=0) throw std::runtime_error("audit write failed");
+    }
+    // Report measured SWMM and host-coupling time; other work includes I/O.
+    void timing(double loop_s, double swmm_s, double couple_s, long steps) {
+        const double l = loop_s > 0 ? loop_s : 1.0;
+        fprintf(log_,"TIMING loop_s=%.1f swmm_s=%.1f (%.0f%%) coupling_host_s=%.1f (%.0f%%) other_s=%.1f steps_2d=%ld\n",
+            loop_s,swmm_s,100.0*swmm_s/l,couple_s,100.0*couple_s/l,loop_s-swmm_s-couple_s,steps);
+        printf("TIMING loop %.1f s, SWMM %.1f s (%.0f%%), coupling on host %.1f s (%.0f%%), 2D steps %ld\n",
+            loop_s,swmm_s,100.0*swmm_s/l,couple_s,100.0*couple_s/l,steps);
+        fflush(log_);
     }
     void finish(double t,double target,int error) {
         const char* state=error ? "FAILED" : (t+1.e-4>=target ? "COMPLETED" : "PARTIAL");

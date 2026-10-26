@@ -15,6 +15,8 @@ Tel: +44-117-928-9108, Fax: +44-117-928-7878
 #include "lisflood.h"
 #include "VersionHistory.h"
 #include "swmm5.h"
+#include <exception>
+#include <stdexcept>
 #include "lisflood2/lisflood_processing.h"
 #include "utility.h"
 #include "sgc.h"
@@ -31,7 +33,7 @@ Tel: +44-117-928-9108, Fax: +44-117-928-7878
 #include "lisflood2/file_tool.h"
 // int argc, char* argv[]
 //---------------------------------------------------------------------------
-int main(int argc, char* argv[])
+int run_model(int argc, char* argv[])
 {
 #ifdef TESTING
 	RunTests();
@@ -361,7 +363,7 @@ int main(int argc, char* argv[])
 		printf("Lisflood is running ......\n");
 		freopen(Fnameptr->logfilename, "w", stdout); // redirect stdout to log file
 		setvbuf(stdout, NULL, _IONBF, 0); // set buffer to zero so log file is always up to date
-		printversion(verbosemode); // output version here as well (so we get on screen and in file)
+		printversion(verbosemode); // repeat the header in the log file
 	}
 
 	// allow output folder to be determined by commandline
@@ -430,7 +432,16 @@ int main(int argc, char* argv[])
 		printf("Start Time: %d:%d:%d \n\n", timeS.tm_hour, timeS.tm_min, timeS.tm_sec);
 	}
 
-
+    if (Fnameptr->hsffloodread[0] && !coupling_restart_file(Fnameptr->hsffloodread)) {
+        FILE* restart = fopen(Fnameptr->hsffloodread, "rb");
+        if (restart) {
+            char signature[5] = {};
+            const size_t count = fread(signature, 1, sizeof(signature), restart);
+            fclose(restart);
+            if (count == sizeof(signature) && memcmp(signature, "LFSWM", sizeof(signature)) == 0)
+                throw std::runtime_error("Unsupported coupled restart format; regenerate with the matching public executable");
+        }
+    }
 
 #ifdef CUDA
 	if (Statesptr->cuda == ON)
@@ -617,7 +628,7 @@ int main(int argc, char* argv[])
 		ReadCheckpoint(Fnameptr, Statesptr, Parptr, Solverptr, BCptr, CSTypePtr, Arrptr, verbosemode);
 		if (verbosemode == ON) printf(" - checkpoint output file: %s\n", ParFp.checkpointfilename);
 	}
-	if (strlen(Fnameptr->hsffloodread) != 0)
+	if (strlen(Fnameptr->hsffloodread) != 0 && !coupling_restart_file(Fnameptr->hsffloodread))
 	{
 		ReadHsfFlood(Fnameptr->hsffloodread, Statesptr, Parptr, CSTypePtr, Arrptr, verbosemode);
 		if (verbosemode == ON) printf("hsfflood read done!\n");
@@ -883,10 +894,9 @@ int main(int argc, char* argv[])
 }
 //---------------------------------------------------------------------------
 void printversion(int verbose)
-// printout header with program and version number
 {
   printf("***************************\n");
-  printf(" LISFLOOD-SWMM | numeric=%s | max point boundaries=%d | built=%s %s\n",NUMERIC_TYPE_NAME,LISFLOOD_MAX_POINT_BOUNDARIES,__DATE__,__TIME__);
+  printf(" LISFLOOD-SWMM 1.3.0 | numeric=%s | max point boundaries=%d | built=%s %s\n",NUMERIC_TYPE_NAME,LISFLOOD_MAX_POINT_BOUNDARIES,__DATE__,__TIME__);
   if (verbose == ON)
   {
 #if defined (__INTEL_COMPILER)
@@ -943,5 +953,15 @@ void printversion(int verbose)
 #endif
 
   printf("***************************\n\n");
+}
+
+int main(int argc, char* argv[])
+{
+    try { return run_model(argc,argv); }
+    catch(const std::exception& error) {
+        fprintf(stderr,"ERROR: %s\n",error.what());
+        fflush(stderr); fflush(stdout);
+        return 1;
+    }
 }
 

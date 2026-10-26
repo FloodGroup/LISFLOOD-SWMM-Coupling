@@ -424,7 +424,7 @@ void read_file_netCDF_start(const char *ncfilename, const char *varname,
     }
   }
   printf("RAIN metadata file=%s frames=%zu grid=%zux%zu units=interval_mm time_units=hours last_interval_duration_inferred_from_previous=yes\n",ncfilename,ncvar->tlen,ncvar->xlen,ncvar->ylen);
-  const char* attrs[]={"case_version","storm_type","spatial_distribution","rainfall_forcing_type","simulation_start_PST","simulation_end_PST"};
+  const char* attrs[]={"storm_type","spatial_distribution","rainfall_forcing_type","simulation_start_PST","simulation_end_PST"};
   for(const char* name:attrs) {
     size_t length=0; nc_type type;
     if(nc_inq_att(ncvar->ncid,NC_GLOBAL,name,&type,&length)==NC_NOERR && type==NC_CHAR && length<1024) {
@@ -443,8 +443,10 @@ bool read_file_netCDF(NetCDFVariable *ncvar, NUMERIC_TYPE curr_time, bool second
   int retval;
 
   size_t old_idx = ncvar->time_idx;
+  // Treat nearby rounded timestamps as the current rain-frame boundary.
   while (static_cast<int>(ncvar->time_idx) < static_cast<int>(ncvar->tlen)-1 &&
-          (seconds ? ncvar->times[ncvar->time_idx+1]*C(3600.0) : ncvar->times[ncvar->time_idx+1]) <= curr_time)
+          (seconds ? (double)(NUMERIC_TYPE)(ncvar->times[ncvar->time_idx+1]*C(3600.0)) - RAIN_FRAME_TIME_TOL
+                   : (double)ncvar->times[ncvar->time_idx+1]) <= (double)curr_time)
   {
       ncvar->time_idx++;
   }

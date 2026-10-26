@@ -9,21 +9,22 @@
 | LISFLOOD-FP | development commit `637106b` (2022-04-20), reported as 8.1.0 in `VersionHistory.h` |
 | EPA SWMM | 5.1.015 (`VERSION 51015` in `consts.h`) |
 
-Relative to these baselines, the release adds the coupling sources below and modifies the upstream areas listed after them.
+The tables below locate the coupling implementation. Public release changes are recorded only in [CHANGES.md](../CHANGES.md).
 
-## Coupling layer (new files)
+## Coupling layer
 
 | File | Back end | Role |
 |---|---|---|
-| `swmm_couple.h` | shared | exchange clock: `coupleint`, clipping dt to the interval, volume accumulation |
+| `swmm_couple.h` | shared | exchange clock, aligned substeps, inlet accumulation and pending return reservoirs |
+| `coupling_restart.h`, `hydraulic_restart_io.h` | shared | bundled surface, SWMM and pending-water restart I/O and compatibility checks |
 | `coupled_boundary.c` / `.h` | shared (SWMM side) | `COUPLED` outfalls: receiving-cell volumes, donor limits, backward-Euler node update, exchange volumes |
 | `cpu_coupling.cpp` / `.h` | CPU | outfall mapping, `COUPLED` outfall stages, returned outfall and flooding volumes, point-source application |
 | `cuda/cuda_coupling_gather.cuh` | CUDA | gather of coupled-cell depths from GPU to host |
 | `cuda/run_audit.cuh` | CUDA | `<resroot>.audit.log` and `<resroot>.water_balance.csv` |
 
-## Modified upstream areas
+## Solver and engine areas
 
-| Area | Files | Change |
+| Area | Files | Role |
 |---|---|---|
 | Build | `CMakeLists.txt`, `config.default.cmake` | SWMM and the coupling layer are compiled into `lisflood`; CUDA is optional |
 | Parameters | `pars.cpp`, `lisflood.h`, `lisflood.cpp` | coupling keywords; checks that coupled runs use ACC or FV1 (CPU or CUDA) |
@@ -32,7 +33,8 @@ Relative to these baselines, the release adds the coupling sources below and mod
 | CUDA mapping and exchange | `cuda/cuda_dem.cu`, `cuda/cuda_dem.cuh` | `floodconfig` reader, node-to-cell mapping, manhole discharge (`cal_flow_exchange`), outfall and flooding sources |
 | CUDA point sources | `cuda/cuda_boundary.cu` | exchange discharge injected as 2-D sources |
 | SWMM core | `swmm5.c` / `.h`, `routing.c`, `dynwave.c`, `node.c`, `enums.h`, `keywords.c`, `text.h`, … | `COUPLED` outfall type, coupling API, volume hooks |
-| Hotstart | `chkpnt.cpp`, `hotstart.c` | coupled surface and SWMM checkpoints (ACC) |
+| Restart | `coupling_restart.h`, `hydraulic_restart_io.h`, `swmm5.c`, `routing.c`, `dynwave.c` | complete hydraulic restart for CPU/CUDA ACC and FV1 |
+| Legacy warm starts | `chkpnt.cpp`, `hotstart.c` | surface-only checkpoints and conventional SWMM warm starts |
 | CPU DG2 | `swe/dg2.cpp` | contains exchange routines that are not used: DG2 runs standalone only |
 
 ## Upstream layout

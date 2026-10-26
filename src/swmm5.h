@@ -62,6 +62,9 @@ int  DLLEXPORT   swmm_getCoupledAudit(double* values);
 int  DLLEXPORT   swmm_setOutfallReceivingCell(int nodeIndex, int cellIndex,
                  double bedMetres, double depthMetres, double areaSquareMetres);
 int  DLLEXPORT   swmm_advanceCoupled(double seconds, double* elapsedTime);
+int  DLLEXPORT   swmm_getNumThreads(void);   /* Dynamic-wave thread count. */
+int  DLLEXPORT   swmm_hydraulicRestartSupported(void);
+int  DLLEXPORT   swmm_hydraulicRestart(void* stream, int reading);
 double DLLEXPORT swmm_getOutfallExchangeVolume(int nodeIndex);
 double DLLEXPORT swmm_getNodeAvailableCoupledVolume(int nodeIndex);
 double DLLEXPORT swmm_getNodeFloodExchangeVolume(int nodeIndex);
