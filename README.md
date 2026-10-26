@@ -152,7 +152,7 @@ Pre-built Windows binaries are published on the **Releases** page, not in the gi
 
 If you use this coupled software package, please cite:
 
-> Yang, R., Long, Z., Jiang, L., & Duan, H.-F. (2026). *LISFLOOD-SWMM: A Two-Way Coupled Dual-Drainage Urban Flood Model* (Version 1.3.0) [Computer software]. https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling
+> Yang, R., Long, Z., Jiang, L., & Duan, H.-F. (2026). *LISFLOOD-SWMM: A Two-Way Coupled Dual-Drainage Urban Flood Model* (Version 1.3.0) [Computer software]. The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University. https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling
 
 Citation metadata are available in [`CITATION.cff`](CITATION.cff) for GitHub's *Cite this repository* feature and [`CITATION.bib`](CITATION.bib) for reference managers.
 
