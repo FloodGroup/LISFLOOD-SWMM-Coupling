@@ -148,12 +148,6 @@ coupleint    step               # or a positive number of seconds
 
 Pre-built Windows binaries are published on the **Releases** page, not in the git tree. Runtime libraries retain their respective redistribution terms; see `THIRD_PARTY_NOTICES.txt` inside the archive.
 
-## Authors and affiliation
-
-Ruiyi **YANG**, Zhiyong **LONG**, Long **JIANG**, and Huan-Feng **DUAN**.
-
-**Affiliation:** The Hong Kong Polytechnic University.
-
 ## Citation
 
 If you use this coupled software package, please cite:
@@ -169,7 +163,7 @@ Citation metadata are available in [`CITATION.cff`](CITATION.cff) for GitHub's *
   version      = {1.3.0},
   date         = {2026-10-26},
   year         = {2026},
-  organization = {The Hong Kong Polytechnic University},
+  organization = {The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University},
   url          = {https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling}
 }
 ```

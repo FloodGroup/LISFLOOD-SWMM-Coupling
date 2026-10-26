@@ -7,16 +7,16 @@ date-released: 2026-10-26
 authors:
   - given-names: Ruiyi
     family-names: Yang
-    affiliation: The Hong Kong Polytechnic University
+    affiliation: "The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University"
   - given-names: Zhiyong
     family-names: Long
-    affiliation: The Hong Kong Polytechnic University
+    affiliation: "The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University"
   - given-names: Long
     family-names: Jiang
-    affiliation: The Hong Kong Polytechnic University
+    affiliation: "The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University"
   - given-names: Huan-Feng
     family-names: Duan
-    affiliation: The Hong Kong Polytechnic University
+    affiliation: "The State Key Laboratory of Climate Resilience for Coastal Cities (SKL-CRCC), The Hong Kong Polytechnic University"
 url: "https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling"
 repository-code: "https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling"
 license: GPL-2.0-only
