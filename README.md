@@ -132,7 +132,8 @@ coupleint    step               # or a positive number of seconds
 │   ├── run.ps1                   Windows launcher used in the binary package
 │   └── test_coupled_restart.py   fixed-interval and restart checks
 ├── CHANGES.md                    public release history
-├── CITATION.cff
+├── CITATION.cff                  software authors and citation metadata
+├── CITATION.bib                  BibTeX software citation
 └── LICENSE                       GPL-2.0
 ```
 
@@ -147,15 +148,33 @@ coupleint    step               # or a positive number of seconds
 
 Pre-built Windows binaries are published on the **Releases** page, not in the git tree. Runtime libraries retain their respective redistribution terms; see `THIRD_PARTY_NOTICES.txt` inside the archive.
 
+## Authors and affiliation
+
+Ruiyi **YANG**, Zhiyong **LONG**, Long **JIANG**, and Huan-Feng **DUAN**.
+
+**Affiliation:** The Hong Kong Polytechnic University.
+
 ## Citation
 
-If you use this software, please cite it using [`CITATION.cff`](CITATION.cff) (GitHub shows a *Cite this repository* button), and also cite LISFLOOD-FP and SWMM:
+If you use this coupled software package, please cite:
+
+> Yang, R., Long, Z., Jiang, L., & Duan, H.-F. (2026). *LISFLOOD-SWMM: A Two-Way Coupled Dual-Drainage Urban Flood Model* (Version 1.3.0) [Computer software]. https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling
+
+Citation metadata are available in [`CITATION.cff`](CITATION.cff) for GitHub's *Cite this repository* feature and [`CITATION.bib`](CITATION.bib) for reference managers.
+
+```bibtex
+@software{Yang_LISFLOOD_SWMM_2026,
+  author       = {Yang, Ruiyi and Long, Zhiyong and Jiang, Long and Duan, Huan-Feng},
+  title        = {{LISFLOOD-SWMM}: A Two-Way Coupled Dual-Drainage Urban Flood Model},
+  version      = {1.3.0},
+  date         = {2026-10-26},
+  year         = {2026},
+  organization = {The Hong Kong Polytechnic University},
+  url          = {https://github.com/FloodGroup/LISFLOOD-SWMM-Coupling}
+}
+```
+
+Please also cite the upstream LISFLOOD-FP and SWMM works:
 
 - Shaw, J., Kesserwani, G., Neal, J., Bates, P. and Sharifian, M. K. (2021). LISFLOOD-FP 8.0: the new discontinuous Galerkin shallow-water solver for multi-core CPUs and GPUs. *Geoscientific Model Development*, 14, 3577–3602. <https://doi.org/10.5194/gmd-14-3577-2021>
 - Rossman, L. A. (2015). *Storm Water Management Model User's Manual, Version 5.1*. EPA/600/R-14/413b, U.S. Environmental Protection Agency.
-
-## Acknowledgements
-
-- LISFLOOD-FP: University of Bristol Hydrology Research Group and contributors
-- EPA SWMM: U.S. Environmental Protection Agency
-- Coupling layer: FloodGroup

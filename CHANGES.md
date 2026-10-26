@@ -14,6 +14,7 @@
 - Report SWMM thread count and measured solver/coupling wall time for both surface solvers. Return a nonzero exit code for SWMM initialisation and restart errors.
 - Add reproducible fixed-interval, every-step and restart regressions with positive and negative net rain, alongside the existing wet-coupling and coincident-source checks.
 - Update the user guide and source map. Redraw the exchange and timing schematics with signed-flow paths, pending-water reservoirs, delayed-return timelines, CFL alignment and defined units; keep implementation names and runtime messages independent of internal development labels.
+- Add named software authors, their institutional affiliation and matching README, CFF and BibTeX citations.
 
 ## 1.2.0
 
